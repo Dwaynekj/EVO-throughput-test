@@ -1,0 +1,13 @@
+{
+  "name": "OpenFin_appseed",
+  "version": "1.0.0",
+  "description": "A vanilla simple openfin app to be used as a starting point for app development",
+  "scripts": {
+    "start": "START /B node_modules/http-server/bin/http-server & node node_modules/openfin-cli/cli.js -l -c http://localhost:8080/app.json"
+  },
+  "author": "Openfin",
+  "devDependencies": {
+    "openfin-cli": "^1.1.4",
+    "http-server": "^4.14.0"
+  }
+}

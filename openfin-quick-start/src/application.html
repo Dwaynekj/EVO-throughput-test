@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Child Application</title>
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<style>
+    body{
+        background-color: #979797;
+    }
+</style>
+<body>
+<div class="container">
+    <h4>Child Application</h4>
+    <p id ="uuid">loading...</p>
+    <button class="btn btn-primary btn-xs" id="post-interapp">Post on the InterAppBus</button><br />
+    <button class="btn btn-primary btn-xs" id="post-many-interapp">Post 1,000 messages on the InterAppBus</button><br />
+    <button class="btn btn-primary btn-xs" id="send-interapp">Send a message to UUID 'interapp-stress-test'
+        (correct)</button><br />
+    <button class="btn btn-primary btn-xs" id="send-bad-interapp">Send a message to UUID 'OpenFin_appseed'
+        (erroneous)</button><br />
+    <hr />
+    <p><strong>Post message to window named:</strong></p>
+    <input id = "message-to-send" type="text" value="Send this message to... ">
+    <button class="btn btn-primary btn-xs" id="send-interapp-unnamed">send to unnamed window</button> or
+    <button class="btn btn-primary btn-xs" id="send-interapp-named">send to window named:</button>
+    <input id = "name-of-window" type="text" value="name of window">
+    <hr />
+    <strong>Receive a message from the Parent app ('inter-app-stress-test')</strong>
+    <div class="output-results" id="inter-app-message">This is where the inter app messages will appear</div>
+</div>
+</body>
+</html>
+<script src="js/Constants.js"></script>
+<script type="text/javascript" src="js/childapplication.js"></script>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Parent App</title>
+
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+</head>
+<style>
+    .message{
+        border: 1px solid #cccccc;
+        padding: 3px;
+        margin: 3px;
+    }
+</style>
+<body>
+<div class="container">
+    <h3>Parent application</h3>
+    <p>If you resize this window the child app windows should resize too.</p>
+    <p id = "of-version"></p>
+    <p id = "uuid"></p>
+    <button class="btn btn-primary" id ="new-btt">create new App</button>
+    <button class="btn btn-primary" id ="min-btt">minimize Apps</button>
+    <button class="btn btn-primary" id ="max-btt">maximize Apps</button>
+    <hr />
+
+    <label for="app_to_app_message">Send this message:  </label><input id="app_to_app_message" type="text"
+                                                                     value="APP_0" />
+    <button class="btn btn-primary" id="app_to_app_button">to the app named -> </button>
+    <input id="app_to_app_uuid" type="text" value="APP_0" />
+    <hr />
+
+
+    <p><strong>Window functions</strong></p>
+    <p>Type a unique name for your new window into the box below and click the 'Create New Window' button</p>
+    <p>The created child widow will be listening for:
+    <ul>
+        <li>topic: 'send-to-named', sender UUID: 'default-child-app', name: name of the window</li>
+        <li>topic: 'send-to-named', sender UUID: 'default-child-app'</li>
+    </ul>'
+    </p>
+    <button class="btn btn-primary" id ="new-win-btt">Create New Window</button>
+    <input id= "window-name" type="text" value ="add a unique window name">
+
+    <div class="message">
+        <p><strong>Wildcard and direct to UUID messages</strong></p>
+        <div id ="inter-app-message">Message</div>
+    </div>
+    <div class="message">
+        <p><strong>Named sends</strong></p>
+        <div id ="named-send-result">Unnamed send result</div>
+    </div>
+    <div class="message">
+        <p><strong>Unnamed sends</strong></p>
+        <div id ="unnamed-send-result">Named send result</div>
+    </div>
+    <div class="message">
+        <p><strong>Listeners</strong></p>
+        <div id ="listeners"></div>
+    </div>
+</div>
+</body>
+</html>
+<script src="js/Constants.js"></script>
+<script src="js/ExternalWindow.js"></script>
+<script src="js/index.js"></script>
