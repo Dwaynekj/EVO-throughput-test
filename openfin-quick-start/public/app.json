@@ -1,0 +1,27 @@
+{
+  "devtools_port": 9090,
+  "runtime": {
+    "version": "6.49.12.113",
+    "arguments": "",
+    "forceLatest": true
+  },
+  "startup_app": {
+    "name": "test",
+    "uuid": "test",
+    "url": "http://127.0.0.1:8080/index.html",
+    "autoShow": true,
+    "resizable": true,
+    "frame": false,
+    "defaultWidth": 300,
+    "minWidth": 300,
+    "defaultHeight": 310,
+    "minHeight": 310,
+    "alwaysOnTop": true,
+    "defaultCentered": true,
+    "saveWindowState": false,
+    "cornerRounding": {
+      "height": 20,
+      "width": 20
+    }
+  }
+}
