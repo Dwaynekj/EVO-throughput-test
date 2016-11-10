@@ -115,13 +115,11 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        var childWidth = 40;
-        var childHeight = 144;
-        var fullWidth = 220 + 1;
 
-        // Elements
         var loader = document.querySelector('#loader');
         var arrowIcon = document.querySelector('#arrow-icon');
+        var parentUrl = "http://localhost:8080/index.html";
+        var childUrl = "http://localhost:8080/child.html";
 
         // Results elements
         var elapsedTimeEl = document.querySelector('#value-elapsed-time');
@@ -133,15 +131,12 @@
         // Variables
         var message; // message being passed though IAB
         var messageSizeInMb;
-        var secondApp;
-        var topic;
         var testIsRunning = false;
         var timeTestStart;
         var timeMessageSent;
         var timeMessageReceived;
         var elapsedTimeIntervalHandle;
         var messageSizeNumber;
-        var parentUuid;
 
         // Results
         var allLatencyInSec = 0;
@@ -151,57 +146,37 @@
 
         fin.desktop.main(function() {
 
-            //=====================================================================
-            // Subscribe to main panel
-            //=====================================================================
-            fin.desktop.Application.getCurrent().getParentUuid(function(v) {
-                parentUuid = v;
+            var finWindow = fin.desktop.Window.getCurrent(),
+                    parentWindow = finWindow.getParentWindow();
 
-                fin.desktop.InterApplicationBus.subscribe(parentUuid, 'test-start', function(message) {
-                    messageSizeNumber = message;
-                    startTesting();
-                });
-                fin.desktop.InterApplicationBus.subscribe(parentUuid, 'test-stop', function() {
-                    stopTesting();
-                });
+            //=====================================================================
+            // Subscriptions
+            //=====================================================================
+            window.addEventListener("message", function (e) {
+                if (e.data.type === "test-start") {
+                    startTesting(e);
+                } else if (e.data.type === "test-stop") {
+                    stopTesting(e);
+                } else if (e.data.type === "msg") {
+                    onMessageReceived(e);
+                }
             });
 
-            //=====================================================================
-            // Window Post Message
-            //=====================================================================
-            topic = fin.desktop.Application.getCurrent().uuid;
-            fin.desktop.InterApplicationBus.addSubscribeListener(function() {
-                loader.classList.add('hidden');
-                fin.desktop.InterApplicationBus.send(parentUuid, 'status', 'ready');
-
-                // Receive message from the second app
-                fin.desktop.InterApplicationBus.subscribe(secondAppUuid, topic, function() {
-                    timeMessageReceived = window.performance.now();
-                    onMessageReceived();
-                });
-            });
-
-            //=====================================================================
-            // Close requested
-            //=====================================================================
-            fin.desktop.Window.getCurrent().addEventListener('close-requested', function() {
-                secondApp.close(true);
-                fin.desktop.Application.getCurrent().close(true);
-            });
-
+            parentWindow.getNativeWindow().postMessage({type: "status", name: finWindow.name, status: "ready"}, parentUrl);
+            loader.classList.add('hidden');
         });
 
         //=====================================================================
         // Start testing
         //=====================================================================
-        function startTesting() {
+        function startTesting(e) {
+            messageSizeNumber = e.data.size;
             testIsRunning = true;
             timeTestStart = window.performance.now();
             startClock();
             resetResults();
             messageSizeInMb = messageSizeNumber / 1024 / 1024;
-            message = generateMessageOfSize(messageSizeNumber);
-            sendMessage();
+            sendMessage(generateMessageOfSize(messageSizeNumber));
         }
 
         //=====================================================================
@@ -222,12 +197,14 @@
         //=====================================================================
         // Send the message
         //=====================================================================
-        function sendMessage() {
-            if (!testIsRunning) {
+        function sendMessage(msg) {
+            if (!testIsRunning || !window._next) {
                 return;
             }
-            //Send Message HERE
+
             arrowIcon.classList.remove('hidden');
+            window._next.getNativeWindow().postMessage({type: "msg", msg: msg}, childUrl);
+
             setTimeout(function() {
                 timeMessageSent = window.performance.now();
                 arrowIcon.classList.add('hidden');
@@ -239,13 +216,14 @@
         //=====================================================================
         // On receiving message
         //=====================================================================
-        function onMessageReceived() {
+        function onMessageReceived(e) {
+            timeMessageReceived = window.performance.now();
             resultsMessages++;
             allSizeInMbTransferred += messageSizeInMb;
             allLatencyInSec += ((timeMessageReceived - timeMessageSent - 50) / 1000); // -50 is for timeout in 2nd app
 
             updateResults();
-            sendMessage();
+            sendMessage(e.data);
         }
 
         //=====================================================================
@@ -274,12 +252,18 @@
             throughputMsgsEl.innerText = throughputMsgs;
 
             // Send test results to main panel
-            fin.desktop.InterApplicationBus.send(parentUuid, 'results', {
-                messages: resultsMessages,
-                latency: latency,
-                throughputMbs: throughputMbs,
-                throughputMsgs: throughputMsgs
-            });
+            parentWindow.getNativeWindow().postMessage({
+                    "type": "results",
+                    "name" : finWindow.name,
+                    "results" :{
+                        messages: resultsMessages,
+                        latency: latency,
+                        throughputMbs: throughputMbs,
+                        throughputMsgs: throughputMsgs
+                     }
+                },
+                parentUrl
+            );
         }
 
         //=====================================================================

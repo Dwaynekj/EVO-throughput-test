@@ -191,7 +191,8 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         fin.desktop.main(function() {
-            var childWins = [];
+            var childWins = []; //Circularly Linked List of OpenFin Child Windows
+            var childUrl = "http://localhost:8080/child.html";
             var screenWidth = 800; // initial, later will be updated
             var screenHeight = 600; // initial, later will be updated
             var width = 220;
@@ -253,8 +254,6 @@
                         }
                     });
                     childWins.splice(winQty);
-                    var lastWin = childWins[childWins.length - 1];
-                    lastWin._next = null;
                 }
                 // create new child windows
                 else if (winQty > childWins.length) {
@@ -264,6 +263,11 @@
                         createNewChildWin(name);
                     }
                 }
+
+                if (childWins.length > 1) {
+                    var lastWin = childWins[childWins.length - 1];
+                    lastWin._next = childWins[0];
+                }
             };
             window.updateWinQty();
 
@@ -272,7 +276,6 @@
             //=====================================================================
             window.exitApp = function() {
                 showLoader();
-                window.updateWinQty(0);
                 fin.desktop.Application.getCurrent().close();
             };
 
@@ -295,27 +298,29 @@
                 //=====================================================================
                 // Setup Child Window
                 //=====================================================================
-                fin.desktop.InterApplicationBus.subscribe(uuid, 'results', function(message, uuid, name) {
-                    childWins.forEach(function(e) {
-                        if (e.name === name) {
-                            e._results = message;
-                        }
-                    });
-                    updateUiResults();
-                });
-                fin.desktop.InterApplicationBus.subscribe(uuid, name, 'status', function(message, uuid, name) {
-                    childWins.forEach(function(e) {
-                        if (e.name === name) {
-                            e._status = message;
-                        }
-                    });
-                    checkIfAllChildWinsConnected();
-                });
+                window.addEventListener("message", function(e){
+
+                    if (e.data.type === "results") {
+                        childWins.forEach(function (c) {
+                            if (c.name === e.data.name) {
+                                c._results = e.data.results;
+                            }
+                        });
+                        updateUiResults();
+                    } else if (e.data.type === "status") {
+
+                        childWins.forEach(function (c) {
+                            if (c.name === e.data.name) {
+                                c._status = e.data.status;
+                            }
+                        });
+                        checkIfAllChildWinsConnected();
+                    }
 
                 var _window = new fin.desktop.Window(
                         {
                             name: name,
-                            url: "http://localhost:8080/child.html",
+                            url: childUrl,
                             frame: false,
                             autoShow: true,
                             resizable: false,
@@ -406,9 +411,9 @@
                 updateUiResults(true); // reset results
 
                 // Tell each app to start testing
-                childWins.forEach(function(app) {
-                    fin.desktop.InterApplicationBus.publish('test-start', messageSizeNumber);
-                });
+                if (childWins[0]){
+                    childWins[0].getNativeWindow().postMessage({type: "test-start", size: messageSizeNumber}, childUrl);
+                }
             }
 
             //=====================================================================
@@ -418,9 +423,9 @@
                 clearInterval(elapsedTimeIntervalHandle);
 
                 // Tell each app to stop testing
-                childWins.forEach(function(app) {
-                    fin.desktop.InterApplicationBus.publish('test-stop', '');
-                });
+                if (childWins[0]){
+                    childWins[0].getNativeWindow().postMessage({type: "test-stop"}, childUrl);
+                }
             }
 
             //=====================================================================
