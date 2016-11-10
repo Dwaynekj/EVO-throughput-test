@@ -212,7 +212,7 @@
             var formElMessageSizeNumber = document.getElementById('message-size-number');
             var formElMessageSizeText = document.getElementById('message-size-text');
             var formElTestStartStop = document.getElementById('test-start-stop');
-            var disablableEls = document.querySelectorAll('input, select, button:not([id="test-start-stop"])');
+            var disablableEls = document.querySelectorAll('input, select, button');
             // HTML Results elements
             var elapsedTimeEl = document.querySelector('#value-elapsed-time');
             var messagesEl = document.querySelector('#value-messages');
@@ -238,6 +238,29 @@
                 screenWidth = monitorInfo.primaryMonitor.availableRect.right;
                 screenHeight = monitorInfo.primaryMonitor.availableRect.bottom;
                 maxRow = Math.floor(screenWidth / winFullWidth);
+            });
+
+            //=====================================================================
+            // Setup Child Window Listeners
+            //=====================================================================
+            window.addEventListener("message", function (e) {
+
+                if (e.data.type === "results") {
+                    childWins.forEach(function (c) {
+                        if (c.name === e.data.name) {
+                            c._results = e.data.results;
+                        }
+                    });
+                    updateUiResults();
+                } else if (e.data.type === "status") {
+
+                    childWins.forEach(function (c) {
+                        if (c.name === e.data.name) {
+                            c._status = e.data.status;
+                        }
+                    });
+                    checkIfAllChildWinsConnected();
+                }
             });
 
             //=====================================================================
@@ -275,7 +298,7 @@
             // Exit application
             //=====================================================================
             window.exitApp = function() {
-                showLoader();
+                showLoader(true);
                 fin.desktop.Application.getCurrent().close();
             };
 
@@ -283,7 +306,7 @@
             // Add new Window to the test
             //=====================================================================
             function createNewChildWin(name) {
-                showLoader();
+                showLoader(true);
 
                 var lastWin = childWins[childWins.length - 1],
                         left, top;
@@ -295,61 +318,39 @@
                     top = 0;
                 }
 
-                //=====================================================================
-                // Setup Child Window
-                //=====================================================================
-                window.addEventListener("message", function (e) {
-
-                    if (e.data.type === "results") {
-                        childWins.forEach(function (c) {
-                            if (c.name === e.data.name) {
-                                c._results = e.data.results;
+                var _window = new fin.desktop.Window(
+                        {
+                            name: name,
+                            url: childUrl,
+                            frame: false,
+                            autoShow: true,
+                            resizable: false,
+                            saveWindowState: false,
+                            minWidth: width,
+                            defaultWidth: width,
+                            minHeight: height,
+                            defaultHeight: height,
+                            defaultTop: top,
+                            defaultLeft: left,
+                            cornerRounding: {
+                                height: 20,
+                                width: 20
                             }
-                        });
-                        updateUiResults();
-                    } else if (e.data.type === "status") {
+                        },
+                        function () {
+                            console.log("Successfully Created Window");
+                        },
+                        function () {
+                            console.log("Window creation failed");
+                        }
+                );
 
-                        childWins.forEach(function (c) {
-                            if (c.name === e.data.name) {
-                                c._status = e.data.status;
-                            }
-                        });
-                        checkIfAllChildWinsConnected();
-                    }
+                childWins.push(_window);
+                if (lastWin) lastWin._next = _window;
+                _window._next = null;
+                _window._status = 'pending';
 
-                    var _window = new fin.desktop.Window(
-                            {
-                                name: name,
-                                url: childUrl,
-                                frame: false,
-                                autoShow: true,
-                                resizable: false,
-                                saveWindowState: false,
-                                minWidth: width,
-                                defaultWidth: width,
-                                minHeight: height,
-                                defaultHeight: height,
-                                defaultTop: top,
-                                defaultLeft: left,
-                                cornerRounding: {
-                                    height: 20,
-                                    width: 20
-                                }
-                            },
-                            function () {
-                                console.log("Successfully Created Window");
-                            },
-                            function () {
-                                console.log("Window creation failed");
-                            }
-                    );
-
-                    childWins.push(_window);
-                    if (lastWin) lastWin._next = _window;
-                    _window._next = null;
-                    _window._status = 'pending';
-                });
-            }
+            };
 
             //=====================================================================
             // Show / hide loader
@@ -357,8 +358,10 @@
             function showLoader(show) {
                 if (show === undefined || show) {
                     loader.classList.remove('hidden');
+                    disableForm(true);
                 } else {
                     loader.classList.add('hidden');
+                    disableForm(false);
                 }
             }
 
@@ -369,9 +372,15 @@
                 var allConnected = childWins.every(function(e) {
                     return e._status === 'ready';
                 });
-                console.log("AllWindows");
+                console.log("AllWindowsReady?");
                 console.log(allConnected);
                 showLoader(winsToCreate || !allConnected);
+            }
+
+            function disableForm(flag){
+                [].forEach.call(disablableEls, function(e) {
+                    e.disabled = flag;
+                });
             }
 
             //=====================================================================
@@ -381,9 +390,7 @@
                 testIsRunning = !testIsRunning;
 
                 // disable elements
-                [].forEach.call(disablableEls, function(e) {
-                    e.disabled = testIsRunning;
-                });
+                disableForm(testIsRunning);
 
                 if (testIsRunning) {
                     formElTestStartStop.innerText = 'Stop';
