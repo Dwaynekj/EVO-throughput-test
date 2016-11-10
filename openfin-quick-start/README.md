@@ -22,7 +22,7 @@ cd openfin-quick-start
 npm install
 ```
 
-## Launching on Windows
+## Launching on Windows OR MAC
 <sub>Demo assumes port 8080 is available</sub>
 
 ### use...
