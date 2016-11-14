@@ -187,38 +187,20 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    var remote = require('electron').remote;
-    var electronWins = []; //Circularly Linked List of Windows
-    var winUrl = "http://localhost:8080/child.html";
-    var screenWidth = 800; // initial, later will be updated
-    var screenHeight = 600; // initial, later will be updated
-    var width = 220;
-    var height = 144;
-    var appsGap = 1;
-    var maxRow = 1; // initial, later will be updated
-    var winFullWidth = width + appsGap;
-    var winFullHeight = height + appsGap;
-    var testIsRunning = false;
-    var elapsedTimeIntervalHandle, timeTestStart;
-    var winsToCreate;
-
-    // HTML elements
-    var loader = document.querySelector('#loader');
-    var version = document.querySelector('.electron-version-indicator');
-    var formElWinQty = document.getElementById('winQty');
-    var formElMessageSizeNumber = document.getElementById('message-size-number');
-    var formElMessageSizeText = document.getElementById('message-size-text');
-    var formElTestStartStop = document.getElementById('test-start-stop');
-    var disablableEls = document.querySelectorAll('input, select, button');
-    // HTML Results elements
-    var elapsedTimeEl = document.querySelector('#value-elapsed-time');
-    var messagesEl = document.querySelector('#value-messages');
-    var latencyEl = document.querySelector('#value-latency');
-    var throughputMbsEl = document.querySelector('#value-throughput-mbs');
-    var throughputMsgsEl = document.querySelector('#value-throughput-msgs');
-
-    // Results
-    var elapsedTime = 0;
+    var electron = require('electron'),
+            ipcRenderer = require('electron').ipcRenderer,
+            testIsRunning = false,
+            loader = document.querySelector('#loader'),
+            version = document.querySelector('.electron-version-indicator'),
+            formElWinQty = document.getElementById('winQty'),
+            formElMessageSizeNumber = document.getElementById('message-size-number'),
+            formElMessageSizeText = document.getElementById('message-size-text'),
+            disablableEls = document.querySelectorAll('input, select, button'),
+            elapsedTimeEl = document.querySelector('#value-elapsed-time'),
+            messagesEl = document.querySelector('#value-messages'),
+            latencyEl = document.querySelector('#value-latency'),
+            throughputMbsEl = document.querySelector('#value-throughput-mbs'),
+            throughputMsgsEl = document.querySelector('#value-throughput-msgs');
 
     //=====================================================================
     // Get current electron version
@@ -226,64 +208,18 @@
     version.innerHTML = process.versions.electron;
 
     //=====================================================================
-    // Get screen bounds and center window
+    // Update Results
     //=====================================================================
-    maxRow = Math.floor(screenWidth / winFullWidth);
-
-    //=====================================================================
-    // Setup Child Window Listeners
-    //=====================================================================
-    window.addEventListener("message", function (e) {
-
-      if (e.data.type === "results") {
-        electronWins.forEach(function (c) {
-          if (c.name === e.data.name) {
-            c._results = e.data.results;
-          }
-        });
-        updateUiResults();
-      } else if (e.data.type === "status") {
-
-        electronWins.forEach(function (c) {
-          if (c.name === e.data.name) {
-            c._status = e.data.status;
-          }
-        });
-        checkIfAllChildWinsConnected();
-      }
+    ipcRenderer.on('results', function (e, results) {
+        updateUiResults(results);
     });
 
     //=====================================================================
     // Make sure needed number of windows are running
     //=====================================================================
-    window.updateWinQty = function(qty) {
+    window.updateWinQty = function() {
       var winQty = typeof qty === 'number' ? qty : formElWinQty.value;
-
-      // close and remove windows
-      if (winQty < electronWins.length) {
-        electronWins.forEach(function(win, i) {
-          if (i + 1 > winQty) {
-            win.close();
-            win.on('closed', function(){
-              win = null;
-            });
-          }
-        });
-        electronWins.splice(winQty);
-      }
-      // create new windows
-      else if (winQty > electronWins.length) {
-        winsToCreate = winQty - electronWins.length;
-        for (var i = 0; i < winsToCreate; i++) {
-          var name = "win" + i;
-          createNewWin(name);
-        }
-      }
-
-      if (electronWins.length > 1) {
-        var lastWin = electronWins[electronWins.length - 1];
-        lastWin._next = electronWins[0];
-      }
+      ipcRenderer.send('updateWinQty', winQty || 0);
     };
     window.updateWinQty();
 
@@ -291,56 +227,13 @@
     // Exit application
     //=====================================================================
     window.exitApp = function() {
-      showLoader(true);
       window.updateWinQty(0);
-    };
-
-    //=====================================================================
-    // Add new Window to the test
-    //=====================================================================
-    function createNewWin() {
-      var BrowserWindow = remote.BrowserWindow;
-      showLoader(true);
-
-      var lastWin = electronWins[electronWins.length - 1],
-              left, top;
-
-      // Calculate win position
-      left = electronWins.length % maxRow * winFullWidth;
-      top = Math.floor(electronWins.length / maxRow) * winFullHeight;
-      if (top + winFullHeight > screenHeight) {
-        top = 0;
-      }
-
-      var _window = BrowserWindow(
-              {
-                frame: false,
-                show: true,
-                resizable: false,
-                minWidth: width,
-                width: width,
-                minHeight: height,
-                height: height,
-                y: top,
-                x: left,
-                webPreferences: {
-                  devTools: true
-                }
-              }
-      );
-      _window.loadURL(url);
-
-      electronWins.push(_window);
-      if (lastWin) lastWin._next = _window;
-      _window._next = null;
-      _window._status = 'pending';
-
     };
 
     //=====================================================================
     // Show / hide loader
     //=====================================================================
-    function showLoader(show) {
+    ipcRenderer.on('loader', function showLoader(e, show) {
       if (show === undefined || show) {
         loader.classList.remove('hidden');
         disableForm(true);
@@ -348,19 +241,7 @@
         loader.classList.add('hidden');
         disableForm(false);
       }
-    }
-
-    //=====================================================================
-    // Check if all apps connected and hide loader
-    //=====================================================================
-    function checkIfAllChildWinsConnected() {
-      var allConnected = electronWins.every(function(e) {
-        return e._status === 'ready';
-      });
-      console.log("AllWindowsReady?");
-      console.log(allConnected);
-      showLoader(winsToCreate || !allConnected);
-    }
+    });
 
     function disableForm(flag){
       [].forEach.call(disablableEls, function(e) {
@@ -400,64 +281,37 @@
       } else if (messageSizeText === 'MB') {
         messageSizeNumber = messageSizeNumber * 1024 * 1024;
       }
-
-      timeTestStart = window.performance.now();
-      startClock();
+      ipcRenderer.send('startTesting', messageSizeNumber);
       updateUiResults(true); // reset results
 
-      // Tell each app to start testing
-      if (electronWins[0]){
-        electronWins[0].getNativeWindow().postMessage({type: "test-start", size: messageSizeNumber}, winUrl);
-      }
     }
 
     //=====================================================================
     // Stop testing
     //=====================================================================
     function stopTesting() {
-      clearInterval(elapsedTimeIntervalHandle);
-
-      // Tell each app to stop testing
-      if (electronWins[0]){
-        electronWins[0].getNativeWindow().postMessage({type: "test-stop"}, winUrl);
-      }
+      ipcRenderer.send('stopTesting');
     }
 
     //=====================================================================
     // Update UI with results
     //=====================================================================
-    function updateUiResults(reset) {
-      var sumMessages = 0;
-      var sumLatency = 0;
-      var sumThroughputMbs = 0;
-      var sumThroughputMsgs = 0;
-
-      //Average across all the child windows for throughput and latency
-      if (!reset) {
-        electronWins.forEach(function(win) {
-          sumMessages += Number(win._results.messages);
-          sumLatency += Number(win._results.latency);
-          sumThroughputMbs += Number(win._results.throughputMbs);
-          sumThroughputMsgs += Number(win._results.throughputMsgs);
-        });
+    function updateUiResults(results, reset) {
+      if (reset) {
+        results = {
+          messages: 0,
+          latency: 0,
+          throughputMbs: 0,
+          throughputMsgs: 0,
+          elapsedTime: 0
+        }
       }
 
-      messagesEl.innerText = sumMessages;
-      latencyEl.innerText = (sumLatency / electronWins.length).toFixed(3);
-      throughputMbsEl.innerText = (sumThroughputMbs / electronWins.length).toFixed(3);
-      throughputMsgsEl.innerText = sumThroughputMsgs;
-    }
-
-    //=====================================================================
-    // Start elapsed time clock
-    //=====================================================================
-    function startClock() {
-      function updateTime() {
-        elapsedTime = Math.round(window.performance.now() - timeTestStart);
-        elapsedTimeEl.innerText = msToTime(elapsedTime);
-      }
-      elapsedTimeIntervalHandle = setInterval(updateTime, 1000);
-      updateTime();
+      elapsedTimeEl.innerText = msToTime(results.elapsedTime);
+      messagesEl.innerText = results.messages;
+      latencyEl.innerText = results.latency;
+      throughputMbsEl.innerText = results.throughputMbs;
+      throughputMsgsEl.innerText = results.throughputMsgs;
     }
 
     //=====================================================================
@@ -474,6 +328,8 @@
 
       return hours + ':' + minutes + ':' + seconds;
     }
+
+
   });
 </script>
 
