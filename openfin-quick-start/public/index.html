@@ -1,7 +1,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>IAB Performance</title>
+    <title>window.postMessage</title>
 
     <link rel="stylesheet" href="vendor/bootstrap/css/bootstrap.css">
 
@@ -146,7 +146,7 @@
         <div class="close-wrapper no-drag">
             <div id="close-app-button" class="close" onclick="exitApp()">&times</div>
         </div>
-        <div class="text-center">IAB Performance</div>
+        <div class="text-center">window.postMessage performance</div>
     </div>
 
     <div id="main-content">
@@ -154,9 +154,6 @@
         <form class="no-drag">
             <div>
                 <input id="winQty" type="number" min="2" max="100" class="form-control" value="2">
-                <select class="form-control">
-                    <option value="KB" selected>Windows</option>
-                </select>
                 <button type="button" class="btn btn-info btn-sm" onclick="updateWinQty()">Update</button>
             </div>
             <div>
@@ -332,6 +329,7 @@
                             defaultHeight: height,
                             defaultTop: top,
                             defaultLeft: left,
+                            contextMenu: true,
                             cornerRounding: {
                                 height: 20,
                                 width: 20

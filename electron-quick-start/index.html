@@ -1,0 +1,481 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Electron Inter-Window Messaging Throughput</title>
+
+  <link rel="stylesheet" href="vendor/bootstrap/css/bootstrap.css">
+
+  <style>
+    html,
+    body,
+    body > div {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    html {
+      border: 1px solid #464545;
+      border-radius: 10px;
+      -webkit-app-region: drag;
+    }
+
+    form {
+      display: flex;
+      margin-bottom: 0;
+      padding-bottom: 15px;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    form > div {
+      display: flex;
+      margin-bottom: 5px;
+    }
+
+    form input,
+    form select,
+    form button {
+      margin-right: 3px;
+      width: 80px !important;
+    }
+
+    #main-content {
+      padding-left: 20px;
+      padding-right: 20px;
+    }
+
+    #test-results {
+      display: inline-flex;
+      flex-direction: column;
+    }
+
+    #test-results div {
+      color: #999;
+      font-size: 14px;
+    }
+
+    #test-results span {
+      color: #fff;
+    }
+
+    .top-bar {
+      padding: 20px;
+      font-size: 20px;
+    }
+
+    .top-bar .close-wrapper {
+      top: 0;
+      right: 0;
+      padding: 7px 10px;
+      position: absolute;
+    }
+
+    .electron-version-indicator {
+      left: 13px;
+      bottom: 8px;
+      color: #606060;
+      font-size: 10px;
+      position: absolute;
+    }
+
+    .electron-text-logo {
+      right: 10px;
+      bottom: 10px;
+      height: 24px;
+      position: absolute;
+    }
+
+    .no-drag {
+      -webkit-app-region: no-drag;
+    }
+
+    /* Darkly theme sizing fix */
+    .form-control {
+      height: 35px;
+      padding: 5px 10px;
+    }
+
+    /* LOADER */
+    #loader {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    #loader .glyphicon {
+      font-size: 32px;
+    }
+
+    .spin {
+      animation: spin 1.5s infinite linear;
+    }
+
+    @keyframes spin {
+      from {
+        transform: scale(1) rotate(0deg);
+      }
+      to {
+        transform: scale(1) rotate(360deg);
+      }
+    }
+  </style>
+
+</head>
+<body>
+
+<div>
+
+  <!-- Loader -->
+  <div id="loader">
+    <div><span class="glyphicon glyphicon-refresh spin"></span></div>
+    <div>Loading</div>
+  </div>
+
+  <!-- Top bar -->
+  <div class="top-bar">
+    <!-- Need padded wrapper around the button to reset :hover -->
+    <div class="close-wrapper no-drag">
+      <div id="close-app-button" class="close" onclick="exitApp()">&times</div>
+    </div>
+    <div class="text-center">Electron Inter-Window Messaging Throughput</div>
+  </div>
+
+  <div id="main-content">
+
+    <form class="no-drag">
+      <div>
+        <input id="winQty" type="number" min="2" max="100" class="form-control" value="2">
+        <button type="button" class="btn btn-info btn-sm" onclick="updateWinQty()">Update</button>
+      </div>
+      <div>
+        <input id="message-size-number" type="number" min="1" max="1000000" class="form-control" value="1">
+        <select id="message-size-text" class="form-control">
+          <option value="B">B</option>
+          <option value="KB" selected>KB</option>
+          <option value="MB">MB</option>
+        </select>
+        <button id="test-start-stop" type="button" class="btn btn-success btn-sm">Start</button>
+      </div>
+    </form>
+
+    <div id="test-results" class="no-drag">
+      <div>Elapsed time: <span id="value-elapsed-time">00:00:00</span></div>
+      <div>Messages: <span id="value-messages">0</span></div>
+      <div>Latency: <span id="value-latency">0.000</span> <span>ms/msg</span> (average)</div>
+      <div>Throughput: <span id="value-throughput-mbs">0.000</span> <span>MB/s</span></div>
+      <div>Throughput: <span id="value-throughput-msgs">0</span> <span>msg/s</span></div>
+    </div>
+
+  </div>
+
+  <!-- Electron version -->
+  <span class="electron-version-indicator"></span>
+
+  <!-- Electron logo -->
+  <img src="" alt="Electron Logo" class="electron-text-logo" >
+
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var remote = require('electron').remote;
+    var electronWins = []; //Circularly Linked List of Windows
+    var winUrl = "http://localhost:8080/child.html";
+    var screenWidth = 800; // initial, later will be updated
+    var screenHeight = 600; // initial, later will be updated
+    var width = 220;
+    var height = 144;
+    var appsGap = 1;
+    var maxRow = 1; // initial, later will be updated
+    var winFullWidth = width + appsGap;
+    var winFullHeight = height + appsGap;
+    var testIsRunning = false;
+    var elapsedTimeIntervalHandle, timeTestStart;
+    var winsToCreate;
+
+    // HTML elements
+    var loader = document.querySelector('#loader');
+    var version = document.querySelector('.electron-version-indicator');
+    var formElWinQty = document.getElementById('winQty');
+    var formElMessageSizeNumber = document.getElementById('message-size-number');
+    var formElMessageSizeText = document.getElementById('message-size-text');
+    var formElTestStartStop = document.getElementById('test-start-stop');
+    var disablableEls = document.querySelectorAll('input, select, button');
+    // HTML Results elements
+    var elapsedTimeEl = document.querySelector('#value-elapsed-time');
+    var messagesEl = document.querySelector('#value-messages');
+    var latencyEl = document.querySelector('#value-latency');
+    var throughputMbsEl = document.querySelector('#value-throughput-mbs');
+    var throughputMsgsEl = document.querySelector('#value-throughput-msgs');
+
+    // Results
+    var elapsedTime = 0;
+
+    //=====================================================================
+    // Get current electron version
+    //=====================================================================
+    version.innerHTML = process.versions.electron;
+
+    //=====================================================================
+    // Get screen bounds and center window
+    //=====================================================================
+    maxRow = Math.floor(screenWidth / winFullWidth);
+
+    //=====================================================================
+    // Setup Child Window Listeners
+    //=====================================================================
+    window.addEventListener("message", function (e) {
+
+      if (e.data.type === "results") {
+        electronWins.forEach(function (c) {
+          if (c.name === e.data.name) {
+            c._results = e.data.results;
+          }
+        });
+        updateUiResults();
+      } else if (e.data.type === "status") {
+
+        electronWins.forEach(function (c) {
+          if (c.name === e.data.name) {
+            c._status = e.data.status;
+          }
+        });
+        checkIfAllChildWinsConnected();
+      }
+    });
+
+    //=====================================================================
+    // Make sure needed number of windows are running
+    //=====================================================================
+    window.updateWinQty = function(qty) {
+      var winQty = typeof qty === 'number' ? qty : formElWinQty.value;
+
+      // close and remove windows
+      if (winQty < electronWins.length) {
+        electronWins.forEach(function(win, i) {
+          if (i + 1 > winQty) {
+            win.close();
+            win.on('closed', function(){
+              win = null;
+            });
+          }
+        });
+        electronWins.splice(winQty);
+      }
+      // create new windows
+      else if (winQty > electronWins.length) {
+        winsToCreate = winQty - electronWins.length;
+        for (var i = 0; i < winsToCreate; i++) {
+          var name = "win" + i;
+          createNewWin(name);
+        }
+      }
+
+      if (electronWins.length > 1) {
+        var lastWin = electronWins[electronWins.length - 1];
+        lastWin._next = electronWins[0];
+      }
+    };
+    window.updateWinQty();
+
+    //=====================================================================
+    // Exit application
+    //=====================================================================
+    window.exitApp = function() {
+      showLoader(true);
+      window.updateWinQty(0);
+    };
+
+    //=====================================================================
+    // Add new Window to the test
+    //=====================================================================
+    function createNewWin() {
+      var BrowserWindow = remote.BrowserWindow;
+      showLoader(true);
+
+      var lastWin = electronWins[electronWins.length - 1],
+              left, top;
+
+      // Calculate win position
+      left = electronWins.length % maxRow * winFullWidth;
+      top = Math.floor(electronWins.length / maxRow) * winFullHeight;
+      if (top + winFullHeight > screenHeight) {
+        top = 0;
+      }
+
+      var _window = BrowserWindow(
+              {
+                frame: false,
+                show: true,
+                resizable: false,
+                minWidth: width,
+                width: width,
+                minHeight: height,
+                height: height,
+                y: top,
+                x: left,
+                webPreferences: {
+                  devTools: true
+                }
+              }
+      );
+      _window.loadURL(url);
+
+      electronWins.push(_window);
+      if (lastWin) lastWin._next = _window;
+      _window._next = null;
+      _window._status = 'pending';
+
+    };
+
+    //=====================================================================
+    // Show / hide loader
+    //=====================================================================
+    function showLoader(show) {
+      if (show === undefined || show) {
+        loader.classList.remove('hidden');
+        disableForm(true);
+      } else {
+        loader.classList.add('hidden');
+        disableForm(false);
+      }
+    }
+
+    //=====================================================================
+    // Check if all apps connected and hide loader
+    //=====================================================================
+    function checkIfAllChildWinsConnected() {
+      var allConnected = electronWins.every(function(e) {
+        return e._status === 'ready';
+      });
+      console.log("AllWindowsReady?");
+      console.log(allConnected);
+      showLoader(winsToCreate || !allConnected);
+    }
+
+    function disableForm(flag){
+      [].forEach.call(disablableEls, function(e) {
+        e.disabled = flag;
+      });
+    }
+
+    //=====================================================================
+    // Start / Stop button
+    //=====================================================================
+    formElTestStartStop.onclick = function() {
+      testIsRunning = !testIsRunning;
+
+      // disable elements
+      disableForm(testIsRunning);
+
+      if (testIsRunning) {
+        formElTestStartStop.innerText = 'Stop';
+        formElTestStartStop.classList.add('btn-danger');
+        startTesting();
+      } else {
+        formElTestStartStop.innerText = 'Start';
+        formElTestStartStop.classList.remove('btn-danger');
+        stopTesting();
+      }
+    };
+
+    //=====================================================================
+    // Start testing
+    //=====================================================================
+    function startTesting() {
+      var messageSizeNumber = Number(formElMessageSizeNumber.value);
+      var messageSizeText = formElMessageSizeText.selectedOptions[0].value;
+
+      if (messageSizeText === 'KB') {
+        messageSizeNumber *= 1024;
+      } else if (messageSizeText === 'MB') {
+        messageSizeNumber = messageSizeNumber * 1024 * 1024;
+      }
+
+      timeTestStart = window.performance.now();
+      startClock();
+      updateUiResults(true); // reset results
+
+      // Tell each app to start testing
+      if (electronWins[0]){
+        electronWins[0].getNativeWindow().postMessage({type: "test-start", size: messageSizeNumber}, winUrl);
+      }
+    }
+
+    //=====================================================================
+    // Stop testing
+    //=====================================================================
+    function stopTesting() {
+      clearInterval(elapsedTimeIntervalHandle);
+
+      // Tell each app to stop testing
+      if (electronWins[0]){
+        electronWins[0].getNativeWindow().postMessage({type: "test-stop"}, winUrl);
+      }
+    }
+
+    //=====================================================================
+    // Update UI with results
+    //=====================================================================
+    function updateUiResults(reset) {
+      var sumMessages = 0;
+      var sumLatency = 0;
+      var sumThroughputMbs = 0;
+      var sumThroughputMsgs = 0;
+
+      //Average across all the child windows for throughput and latency
+      if (!reset) {
+        electronWins.forEach(function(win) {
+          sumMessages += Number(win._results.messages);
+          sumLatency += Number(win._results.latency);
+          sumThroughputMbs += Number(win._results.throughputMbs);
+          sumThroughputMsgs += Number(win._results.throughputMsgs);
+        });
+      }
+
+      messagesEl.innerText = sumMessages;
+      latencyEl.innerText = (sumLatency / electronWins.length).toFixed(3);
+      throughputMbsEl.innerText = (sumThroughputMbs / electronWins.length).toFixed(3);
+      throughputMsgsEl.innerText = sumThroughputMsgs;
+    }
+
+    //=====================================================================
+    // Start elapsed time clock
+    //=====================================================================
+    function startClock() {
+      function updateTime() {
+        elapsedTime = Math.round(window.performance.now() - timeTestStart);
+        elapsedTimeEl.innerText = msToTime(elapsedTime);
+      }
+      elapsedTimeIntervalHandle = setInterval(updateTime, 1000);
+      updateTime();
+    }
+
+    //=====================================================================
+    // Convert milliseconds to time string
+    //=====================================================================
+    function msToTime(duration) {
+      var seconds = parseInt((duration / 1000) % 60);
+      var minutes = parseInt((duration / (1000 * 60)) % 60);
+      var hours = parseInt((duration / (1000 * 60 * 60)) % 24);
+
+      hours = (hours < 10) ? '0' + hours : hours;
+      minutes = (minutes < 10) ? '0' + minutes : minutes;
+      seconds = (seconds < 10) ? '0' + seconds : seconds;
+
+      return hours + ':' + minutes + ':' + seconds;
+    }
+  });
+</script>
+
+</body>
+</html>
