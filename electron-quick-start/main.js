@@ -38,8 +38,8 @@ var electron = require('electron'),
 app.on('ready', function init () {
     // Create the browser window.
     mainWin = new BrowserWindow({
-        width: 300,
-        height: 310,
+        width: 330,
+        height: 400,
         frame: false,
         webPreferences: {
             devTools: true
@@ -48,7 +48,7 @@ app.on('ready', function init () {
 
     // and load the index.html of the app.
     mainWin.loadURL(localIndex);
-    //mainWin.webContents.openDevTools();
+    // mainWin.webContents.openDevTools();
 
     // Emitted when the window is closed.
     mainWin.on('closed', function () {

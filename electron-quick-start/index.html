@@ -33,10 +33,15 @@
     }
 
     form input,
+    form .details,
     form select,
     form button {
-      margin-right: 3px;
-      width: 80px !important;
+      margin-right: 5px;
+      width: 90px !important;
+    }
+
+    form .details {
+      padding: 7px;
     }
 
     #main-content {
@@ -111,6 +116,15 @@
       pointer-events: none;
     }
 
+    /* recorder */
+    #recorder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 100;
+    }
+
     #loader .glyphicon {
       font-size: 32px;
     }
@@ -140,6 +154,11 @@
     <div>Loading</div>
   </div>
 
+  <div id="recorder" class="hidden">
+    <div><span class="glyphicon glyphicon-refresh spin"></span></div>
+    <div>recording snapshots</div>
+  </div>
+
   <!-- Top bar -->
   <div class="top-bar">
     <!-- Need padded wrapper around the button to reset :hover -->
@@ -154,6 +173,7 @@
     <form class="no-drag">
       <div>
         <input id="winQty" type="number" min="2" max="100" class="form-control" value="2">
+        <span class="details">Windows</span>
         <button id="winQtyBtn" type="button" class="btn btn-info btn-sm" onclick="updateWinQty()">Update</button>
       </div>
       <div>
@@ -164,6 +184,20 @@
           <option value="MB">MB</option>
         </select>
         <button id="test-start-stop" type="button" class="btn btn-success btn-sm">Start</button>
+      </div>
+      <div>
+        <input id="snapshot-number" type="number" min="1" max="25" class="form-control" value="2">
+        <span class="details">Recordings</span>
+        <button id="snap" type="button" class="btn btn-success btn-sm">Snapshot</button>
+      </div>
+      <div>
+        <input id="snapshot-interval" type="number" min="1" max="1000" class="form-control" value="500">
+        <span class="details">Interval(ms)</span>
+        <button id="copy" type="button" class="btn btn-success btn-sm hidden">Copy</button>
+      </div>
+      <div>
+
+
       </div>
     </form>
 
@@ -181,7 +215,7 @@
   <span class="electron-version-indicator"></span>
 
   <!-- Electron logo -->
-  <img src="" alt="Electron Logo" class="electron-text-logo" >
+  <img src="assets/electron.png" alt="Electron Logo" class="electron-text-logo" >
 
 </div>
 
@@ -189,19 +223,32 @@
   document.addEventListener('DOMContentLoaded', function() {
     var electron = require('electron'),
             ipcRenderer = require('electron').ipcRenderer,
+            clipboard = require('electron').clipboard,
             testIsRunning = false,
+            snapShotIsRunning = false,
+            lastResults = null,
+            snapShots = [],
+            snapShotTimeout = null,
             loader = document.querySelector('#loader'),
+            recorder = document.querySelector('#recorder'),
             version = document.querySelector('.electron-version-indicator'),
             formElWinQty = document.getElementById('winQty'),
             formElTestStartStop = document.getElementById('test-start-stop'),
             formElMessageSizeNumber = document.getElementById('message-size-number'),
             formElMessageSizeText = document.getElementById('message-size-text'),
-            disablableEls = document.querySelectorAll('input, select, #winQtyBtn'),
+            formElSnapShotNum = document.getElementById('snapshot-number'),
+            formElSnapShotInterval = document.getElementById('snapshot-interval'),
+            disablableEls = document.querySelectorAll('#message-size-number, #message-size-text, #winQty, #winQtyBtn'),
+            snapShotBtn = document.querySelector('#snap'),
+            snapShotEls = document.querySelectorAll('#snapshot-number, #snapshot-interval'),
+            copyBtn = document.querySelector('#copy'),
             elapsedTimeEl = document.querySelector('#value-elapsed-time'),
             messagesEl = document.querySelector('#value-messages'),
             latencyEl = document.querySelector('#value-latency'),
             throughputMbsEl = document.querySelector('#value-throughput-mbs'),
             throughputMsgsEl = document.querySelector('#value-throughput-msgs');
+
+
 
     //=====================================================================
     // Get current electron version
@@ -212,6 +259,7 @@
     // Update Results
     //=====================================================================
     ipcRenderer.on('results', function (e, results) {
+        lastResults = results;
         updateUiResults(results);
     });
 
@@ -237,15 +285,19 @@
     ipcRenderer.on('loader', function showLoader(e, show) {
       if (show === undefined || show) {
         loader.classList.remove('hidden');
-        disableForm(true);
+        disableEls(true);
       } else {
         loader.classList.add('hidden');
-        disableForm(false);
+        disableEls(false,  disablableEls);
+        disableEls(false,  snapShotEls);
+        formElTestStartStop.disabled = false;
       }
     });
 
-    function disableForm(flag){
-      [].forEach.call(disablableEls, function(e) {
+    function disableEls(flag, els){
+      //els = Array.prototype.slice.call(arguments, 1, arguments.length - 1);
+      els = els || document.querySelectorAll('input, select, button');
+      [].forEach.call(els, function(e) {
         e.disabled = flag;
       });
     }
@@ -257,23 +309,92 @@
       testIsRunning = !testIsRunning;
 
       // disable elements
-      disableForm(testIsRunning);
+      disableEls(testIsRunning, disablableEls);
+      snapShotBtn.disabled = !testIsRunning; //disable button when tests are not running
 
       if (testIsRunning) {
-        formElTestStartStop.innerText = 'Stop';
-        formElTestStartStop.classList.add('btn-danger');
         startTesting();
       } else {
-        formElTestStartStop.innerText = 'Start';
-        formElTestStartStop.classList.remove('btn-danger');
         stopTesting();
       }
+    };
+
+
+    //=====================================================================
+    // Snapshot button
+    //=====================================================================
+    snapShotBtn.onclick = function() {
+      snapShotIsRunning = !snapShotIsRunning;
+      if (snapShotIsRunning) {
+        startSnapShot();
+      } else {
+        stopSnapShot();
+      }
+    };
+
+
+    //=====================================================================
+    // Start Snapshots
+    //=====================================================================
+    function startSnapShot() {
+      var num = Number(formElSnapShotNum.value),
+              interval = Number(formElSnapShotInterval.value);
+
+      disableEls(true, snapShotEls);
+      copyBtn.disabled = true;
+      snapShotBtn.innerText = 'Stop Snap';
+      snapShotBtn.classList.add('btn-danger');
+      copyBtn.classList.add('hidden');
+      recorder.classList.remove('hidden');
+
+      function takeSnap() {
+        if (num > 0) {
+          snapShotTimeout = setTimeout(function () {
+            num--;
+            if (lastResults) {
+              snapShots.push(Object.assign({}, lastResults));
+            }
+            takeSnap();
+          }, interval);
+        } else {
+          console.log('Snap shot complete');
+          stopSnapShot();
+        }
+      }
+
+      takeSnap();
+
+    }
+
+    //=====================================================================
+    // Stop Snapshots
+    //=====================================================================
+    function stopSnapShot() {
+      clearTimeout(snapShotTimeout);
+      disableEls(false, snapShotEls);
+      copyBtn.disabled = false;
+
+      snapShotBtn.innerText = 'Start Snap';
+      snapShotBtn.classList.remove('btn-danger');
+      copyBtn.classList.remove('hidden');
+      recorder.classList.add('hidden');
+    }
+
+
+    //=====================================================================
+    // Copy button
+    //=====================================================================
+    copyBtn.onclick = function() {
+      clipboard.writeText(JSON.stringify(snapShots, null, 4));
     };
 
     //=====================================================================
     // Start testing
     //=====================================================================
     function startTesting() {
+      formElTestStartStop.innerText = 'Stop';
+      formElTestStartStop.classList.add('btn-danger');
+
       var messageSizeNumber = Number(formElMessageSizeNumber.value);
       var messageSizeText = formElMessageSizeText.selectedOptions[0].value;
 
@@ -291,6 +412,9 @@
     // Stop testing
     //=====================================================================
     function stopTesting() {
+      stopSnapShot();
+      formElTestStartStop.innerText = 'Start';
+      formElTestStartStop.classList.remove('btn-danger');
       ipcRenderer.send('stopTesting');
     }
 
