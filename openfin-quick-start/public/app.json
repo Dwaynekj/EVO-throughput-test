@@ -1,7 +1,7 @@
 {
   "devtools_port": 9090,
   "runtime": {
-    "version": "6.49.12.113",
+    "version": "6.49.12.120",
     "arguments": "",
     "forceLatest": true
   },

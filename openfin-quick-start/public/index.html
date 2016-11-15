@@ -246,7 +246,7 @@
                     //DOM
                     loader = document.querySelector('#loader'),
                     recorder = document.querySelector('#recorder'),
-                    version = document.querySelector('.electron-version-indicator'),
+                    runtimeVersionEl = document.querySelector('.runtime-version-indicator'),
                     formElWinQty = document.getElementById('winQty'),
                     formElTestStartStop = document.getElementById('test-start-stop'),
                     formElMessageSizeNumber = document.getElementById('message-size-number'),
@@ -341,6 +341,7 @@
                 }
             };
             window.updateWinQty();
+            fin.desktop.System.showDeveloperTools("test", "win1");
 
             //=====================================================================
             // Add new Window to the test
