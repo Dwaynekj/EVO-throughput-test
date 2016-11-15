@@ -6,9 +6,9 @@ This is a minimal Openfin application based on the [Quick Start Guide](https://o
 
 A basic Openfin application needs just these files:
 
-- `app.json` - Configuration for launching your openfin app that is used by [openfin-cli](https://github.com/openfin/openfin-cli)
-- `index.html` - A web page to render for the parent window.
-- `child.html` - A web page for child windows to render.
+- `public/app.json` - Configuration for launching your openfin app that is used by [openfin-cli](https://github.com/openfin/openfin-cli)
+- `public/index.html` - A web page to render for the parent window. This is the test control.
+- `public/child.html` - A web page for child windows to render. This is part of the intra-process test
 - `package.json` - Not necessary. Simply used to facilitate quick launch
 
 ## To install
