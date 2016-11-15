@@ -1,9 +1,22 @@
 var electron = require('electron'),
     app = electron.app, // Module to control application life.
     ipcMain = electron.ipcMain,
-    BrowserWindow = electron.BrowserWindow, // Module to create native browser window.
+    BrowserWindow = electron.BrowserWindow, // Module to create native browser window
+    process = require('process'),
+    path = require('path'),
+    url = require('url'),
+    localIndex = url.format({
+        pathname: path.join(__dirname, 'index.html'),
+        protocol: 'file:',
+        slashes: true
+    }),
+    localTestWin = url.format({
+        pathname: path.join(__dirname, 'test-window.html'),
+        protocol: 'file:',
+        slashes: true
+    }),
     // Window Information
-    electronWins = [], //Circularly Linked Lists
+    testWins = [], //Circularly Linked Lists
     width = 220,
     height = 144,
     appsGap = 1,
@@ -27,7 +40,7 @@ app.on('ready', function init () {
     mainWin = new BrowserWindow({width: 300, height: 310});
 
     // and load the index.html of the app.
-    mainWin.loadURL('http://localhost:8080/child.html');
+    mainWin.loadURL(localIndex);
 
     // Emitted when the window is closed.
     mainWin.on('closed', function () {
@@ -57,8 +70,12 @@ ipcMain.on('startTesting', function(event, messageSizeNumber) {
     startTesting(messageSizeNumber);
 });
 
-ipcMain.on('stopTesting', function(event) {
+ipcMain.on('stopTesting', function() {
     stopTesting();
+});
+
+ipcMain.on('msg', function(event, msg) {
+    forwardMessage();
 });
 
 
@@ -67,12 +84,12 @@ ipcMain.on('stopTesting', function(event) {
 //=====================================================================
 function createNewWin() {
 
-    var lastWin = electronWins[electronWins.length - 1],
+    var lastWin = testWins[testWins.length - 1],
         left, top;
 
     // Calculate win position
-    left = electronWins.length % maxRow * winFullWidth;
-    top = Math.floor(electronWins.length / maxRow) * winFullHeight;
+    left = testWins.length % maxRow * winFullWidth;
+    top = Math.floor(testWins.length / maxRow) * winFullHeight;
     if (top + winFullHeight > screenHeight) {
         top = 0;
     }
@@ -93,9 +110,9 @@ function createNewWin() {
             }
         }
     );
-    _window.loadURL('http://localhost:8080/child.html');
+    _window.loadURL(localTestWin);
 
-    electronWins.push(_window);
+    testWins.push(_window);
     if (lastWin) {lastWin._next = _window;}
     _window._next = null;
 }
@@ -106,8 +123,8 @@ function createNewWin() {
 function updateWinQty(winQty, event){
 
     // close and remove windows
-    if (winQty < electronWins.length) {
-        electronWins.forEach(function(win, i) {
+    if (winQty < testWins.length) {
+        testWins.forEach(function(win, i) {
             if (i + 1 > winQty) {
                 win.close();
                 win.on('closed', function(){
@@ -115,19 +132,19 @@ function updateWinQty(winQty, event){
                 });
             }
         });
-        electronWins.splice(winQty);
+        testWins.splice(winQty);
     }
     // create new windows
-    else if (winQty > electronWins.length) {
-        winsToCreate = winQty - electronWins.length;
+    else if (winQty > testWins.length) {
+        winsToCreate = winQty - testWins.length;
         for (var i = 0; i < winsToCreate; i++) {
             createNewWin();
         }
     }
 
-    if (electronWins.length > 1) {
-        var lastWin = electronWins[electronWins.length - 1];
-        lastWin._next = electronWins[0];
+    if (testWins.length > 1) {
+        var lastWin = testWins[testWins.length - 1];
+        lastWin._next = testWins[0];
     }
 
     event.sender.send('loader', false);
@@ -137,44 +154,59 @@ function updateWinQty(winQty, event){
 // Start elapsed time clock
 //=====================================================================
 function startClock() {
+    timeTestStart = process.hrtime();
     elapsedTimeIntervalHandle = setInterval(analytics, 1000);
-    analytics();
 }
 
 //=====================================================================
 // Crunch numbers and send to the mainWindow
 //=====================================================================
 function analytics() {
+    var elapsedTime = process.hrtime(timeTestStart);
+
     var results = {
         messages: 0,
         latency: 0,
         throughputMbs: 0,
         throughputMsgs: 0,
-        elapsedTime: Math.round(window.performance.now() - timeTestStart)
+        elapsedTime: Math.round((elapsedTime[0]*1000) + (elapsedTime[1]/1000000)) //convert nanoseconds to milliseconds
     };
 
     //Average across all the child windows for throughput and latency
-    electronWins.forEach(function(win) {
+    testWins.forEach(function(win) {
         results.messages += Number(win._results.messages);
         results.latency += Number(win._results.latency);
         results.throughputMbs += Number(win._results.throughputMbs);
         results.throughputMsgs += Number(win._results.throughputMsgs);
     });
 
-    results.latency = (results.latency  / electronWins.length).toFixed(3);
-    results.throughputMbs = ( results.throughputMbs / electronWins.length).toFixed(3);
+    results.latency = (results.latency  / testWins.length).toFixed(3);
+    results.throughputMbs = ( results.throughputMbs / testWins.length).toFixed(3);
 
     ipcMain.send('results', results);
 }
 
 //=====================================================================
+// Pass messages between renderer processes
+//=====================================================================
+function forwardMessage(event, msg) {
+    var win = findWindow(event.sender.id);
+    if (win._next) {
+        win._next.webContents.send('msg', msg); //Round and Round the messages go
+    }
+}
+
+
+//=====================================================================
 // Start testing
 //=====================================================================
 function startTesting(messageSizeNumber) {
-    timeTestStart = window.performance.now();
     startClock();
-
-    // Tell each app to start testing
+    testWins[0].webContents.send('start', messageSizeNumber);
+    ipcMain.on('testWindowResult', function (e, results){
+        var win = findWindow(e.sender.id);
+        win._results = results;
+    });
 }
 
 //=====================================================================
@@ -182,9 +214,13 @@ function startTesting(messageSizeNumber) {
 //=====================================================================
 function stopTesting() {
     clearInterval(elapsedTimeIntervalHandle);
-
-    // Tell each app to stop testing
+    testWins[0].webContents.send('stop');
+    ipcMain.removeAllListeners('testWindowResult');
 }
 
 
-
+function findWindow(id){
+    return testWins.find(function(w){
+        return w.id === id;
+    });
+}

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>IAB Performance</title>
+
+    <link rel="stylesheet" href="./vendor/bootstrap/css/bootstrap.css">
+
+    <style>
+        html,
+        body,
+        body > div {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        html {
+            padding: 20px;
+            border: 1px solid #464545;
+            border-radius: 10px;
+            -webkit-app-region: drag;
+        }
+
+        #test-results {
+            display: inline-flex;
+            flex-direction: column;
+        }
+
+        #test-results div {
+            color: #999;
+            font-size: 14px;
+        }
+
+        #test-results span {
+            color: #fff;
+        }
+
+        #arrow-icon-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            pointer-events: none;
+        }
+
+        #arrow-icon {
+            font-size: 20px;
+            margin-right: 10px;
+            color: lime;
+        }
+
+        /* LOADER */
+        #loader {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        #loader .glyphicon {
+            font-size: 32px;
+        }
+
+        .spin {
+            animation: spin 1.5s infinite linear;
+        }
+
+        @keyframes spin {
+            from {
+                transform: scale(1) rotate(0deg);
+            }
+            to {
+                transform: scale(1) rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div>
+    <!-- Loader -->
+    <div id="loader">
+        <div><span class="glyphicon glyphicon-refresh spin"></span></div>
+        <div>Loading</div>
+    </div>
+
+    <!-- Right arrow icon -->
+    <div id="arrow-icon-wrapper">
+        <span id="arrow-icon" class="glyphicon glyphicon-menu-right hidden"></span>
+    </div>
+
+    <div id="main-content">
+        <div id="test-results">
+            <div>Elapsed time: <span id="value-elapsed-time">00:00:00</span></div>
+            <div>Messages: <span id="value-messages">0</span></div>
+            <div>Latency: <span id="value-latency">0.000</span> <span>ms/msg</span></div>
+            <div>Throughput: <span id="value-throughput-mbs">0.000</span> <span>MB/s</span></div>
+            <div>Throughput: <span id="value-throughput-msgs">0</span> <span>msg/s</span></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var electron = require('electron'),
+                ipcRenderer = require('electron').ipcRenderer,
+                loader = document.querySelector('#loader'),
+                arrowIcon = document.querySelector('#arrow-icon'),
+
+                // Results elements
+                elapsedTimeEl = document.querySelector('#value-elapsed-time'),
+                messagesEl = document.querySelector('#value-messages'),
+                latencyEl = document.querySelector('#value-latency'),
+                throughputMbsEl = document.querySelector('#value-throughput-mbs'),
+                throughputMsgsEl = document.querySelector('#value-throughput-msgs'),
+
+                // Variables
+                testIsRunning = false,
+                timeTestStart,
+                timeMessageSent,
+                timeMessageReceived,
+                elapsedTimeIntervalHandle,
+                firstReceived = true,
+
+                // Results
+                allLatencyInSec = 0,
+                elapsedTime = 0,
+                resultsMessages = 0,
+                rawDataSizeSent = 0, //bytes
+                allSizeInMbTransferred = 0; //Mb
+
+        arrowIcon.classList.add('hidden');
+
+        //=====================================================================
+        // Subscriptions
+        //=====================================================================
+        // (Re)Start tests and the very first message for the first window in the cycle
+        ipcRenderer.on('start', function (e, messageSizeNumber) {
+            startTesting(messageSizeNumber);
+        });
+
+        // Messages will be looped back to the first window but not sent again
+        ipcRenderer.on('stop', function () {
+            stopTesting();
+        });
+
+        //All Windows respond to a message
+        ipcRenderer.on('msg', function (e, msg) {
+            onMessageReceived(msg);
+        });
+
+        //=====================================================================
+        // Start testing
+        //=====================================================================
+        function startTesting(messageSizeNumber) {
+            testIsRunning = true;
+            startClock();
+            resetResults();
+            sendMessage(generateMessageOfSize(messageSizeNumber));
+        }
+
+        //=====================================================================
+        // Stop testing
+        //=====================================================================
+        function stopTesting() {
+            testIsRunning = false;
+            clearInterval(elapsedTimeIntervalHandle)
+        }
+
+        //=====================================================================
+        // Generate a message of the specified size
+        //=====================================================================
+        function generateMessageOfSize(length) {
+            return Array.prototype.join.call({length: (length || -1) + 1}, 'x');
+        }
+
+        //=====================================================================
+        // Send the message around the loop until the first window says stop.
+        // Do Animation with UI
+        //=====================================================================
+        function sendMessage(msg) {
+            if (!testIsRunning) {
+                return;
+            }
+
+            arrowIcon.classList.remove('hidden');
+
+            ipcRenderer.send('msg', msg);
+            timeMessageSent = window.performance.now();
+            resultsMessages++;
+            rawDataSizeSent += msg.length;
+
+            setTimeout(function() {
+                arrowIcon.classList.add('hidden');
+            }, 50); // give some time for UI
+        }
+
+        //=====================================================================
+        // On receiving message
+        //=====================================================================
+        function onMessageReceived(message) {
+            var time = window.performance.now();
+
+            // For every window besides the first window in the chain
+            // Receiving an initial message starts the clock
+            if (firstReceived){
+                startClock(time);
+                firstReceived = false;
+
+            } else {
+                timeMessageReceived = time;
+                resultsMessages++;
+                rawDataSizeSent += msg.length;
+                allLatencyInSec += ((timeMessageReceived - timeMessageSent) / 1000);
+                updateResults();
+            }
+
+            sendMessage(message);
+        }
+
+        //=====================================================================
+        // Reset results
+        //=====================================================================
+        function resetResults() {
+            allLatencyInSec = 0;
+            elapsedTime = 0;
+            resultsMessages = 0;
+            rawDataSizeSent = 0;
+            updateResults();
+        }
+
+        //=====================================================================
+        // Update UI with results
+        //=====================================================================
+        function updateResults() {
+            // || 1 in these cases will prevent NaN
+            allSizeInMbTransferred = rawDataSizeSent / 1024 / 1024;
+            var latency = (allLatencyInSec * 1000 / (resultsMessages || 1)).toFixed(3);
+            var throughputMbs = (allSizeInMbTransferred / (allLatencyInSec || 1)).toFixed(3);
+            var throughputMsgs = Math.floor(resultsMessages / (allLatencyInSec || 1));
+
+            messagesEl.innerText = resultsMessages;
+            latencyEl.innerText = latency;
+            throughputMbsEl.innerText = throughputMbs;
+            throughputMsgsEl.innerText = throughputMsgs;
+
+            // Send test results to main panel
+            ipcRenderer.send('testWindowResult', {
+                messages: resultsMessages,
+                latency: latency,
+                throughputMbs: throughputMbs,
+                throughputMsgs: throughputMsg
+            });
+        }
+
+        //=====================================================================
+        // Start elapsed time clock
+        //=====================================================================
+        function startClock(initialTime) {
+            timeTestStart = initialTime || window.performance.now();
+            function updateTime() {
+                elapsedTime = window.performance.now() - timeTestStart;
+                elapsedTimeEl.innerText = msToTime(elapsedTime);
+            }
+            elapsedTimeIntervalHandle = setInterval(updateTime, 1000);
+            updateTime();
+        }
+
+        //=====================================================================
+        // Convert milliseconds to time string
+        //=====================================================================
+        function msToTime(duration) {
+            var seconds = parseInt((duration / 1000) % 60);
+            var minutes = parseInt((duration / (1000 * 60)) % 60);
+            var hours = parseInt((duration / (1000 * 60 * 60)) % 24);
+
+            hours = (hours < 10) ? '0' + hours : hours;
+            minutes = (minutes < 10) ? '0' + minutes : minutes;
+            seconds = (seconds < 10) ? '0' + seconds : seconds;
+
+            return hours + ':' + minutes + ':' + seconds;
+        }
+
+    });
+</script>
+
+</body>
+</html>
