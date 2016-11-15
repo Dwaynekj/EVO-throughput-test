@@ -117,7 +117,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         var electron = require('electron'),
                 ipcRenderer = require('electron').ipcRenderer,
-                loader = document.querySelector('#loader'),
+                loader = document.querySelector('#loader').classList.add('hidden'),
                 arrowIcon = document.querySelector('#arrow-icon'),
 
                 // Results elements
@@ -138,8 +138,9 @@
                 // Results
                 allLatencyInSec = 0,
                 elapsedTime = 0,
-                resultsMessages = 0,
-                rawDataSizeSent = 0, //bytes
+                resultsMessages = 0, //messages recieved
+                payLoadSize = 0, //bytes
+                totalPayloadTransferred = 0, //bytes sent and recieved
                 allSizeInMbTransferred = 0; //Mb
 
         arrowIcon.classList.add('hidden');
@@ -147,12 +148,16 @@
         //=====================================================================
         // Subscriptions
         //=====================================================================
+        ipcRenderer.on('ready', function (e, messageSizeNumber) {
+            readyForTesting(messageSizeNumber);
+        });
+
         // (Re)Start tests and the very first message for the first window in the cycle
         ipcRenderer.on('start', function (e, messageSizeNumber) {
             startTesting(messageSizeNumber);
         });
 
-        // Messages will be looped back to the first window but not sent again
+        // Stop all windows
         ipcRenderer.on('stop', function () {
             stopTesting();
         });
@@ -163,13 +168,21 @@
         });
 
         //=====================================================================
-        // Start testing
+        // Start Testing
         //=====================================================================
         function startTesting(messageSizeNumber) {
-            testIsRunning = true;
+            firstReceived = false;
             startClock();
-            resetResults();
             sendMessage(generateMessageOfSize(messageSizeNumber));
+        }
+
+        //=====================================================================
+        // Ready Window for Testing
+        //=====================================================================
+        function readyForTesting(messageSizeNumber) {
+            payLoadSize = messageSizeNumber;
+            testIsRunning = true;
+            resetResults();
         }
 
         //=====================================================================
@@ -201,17 +214,17 @@
             ipcRenderer.send('msg', msg);
             timeMessageSent = window.performance.now();
             resultsMessages++;
-            rawDataSizeSent += msg.length;
+            totalPayloadTransferred += msg.length;
 
             setTimeout(function() {
                 arrowIcon.classList.add('hidden');
-            }, 50); // give some time for UI
+            }, 100); // give some time for UI
         }
 
         //=====================================================================
         // On receiving message
         //=====================================================================
-        function onMessageReceived(message) {
+        function onMessageReceived(msg) {
             var time = window.performance.now();
 
             // For every window besides the first window in the chain
@@ -223,12 +236,12 @@
             } else {
                 timeMessageReceived = time;
                 resultsMessages++;
-                rawDataSizeSent += msg.length;
+                totalPayloadTransferred += msg.length;
                 allLatencyInSec += ((timeMessageReceived - timeMessageSent) / 1000);
                 updateResults();
             }
 
-            sendMessage(message);
+            sendMessage(msg);
         }
 
         //=====================================================================
@@ -238,7 +251,7 @@
             allLatencyInSec = 0;
             elapsedTime = 0;
             resultsMessages = 0;
-            rawDataSizeSent = 0;
+            totalPayloadTransferred = 0;
             updateResults();
         }
 
@@ -247,7 +260,7 @@
         //=====================================================================
         function updateResults() {
             // || 1 in these cases will prevent NaN
-            allSizeInMbTransferred = rawDataSizeSent / 1024 / 1024;
+            allSizeInMbTransferred = totalPayloadTransferred / 1024 / 1024;
             var latency = (allLatencyInSec * 1000 / (resultsMessages || 1)).toFixed(3);
             var throughputMbs = (allSizeInMbTransferred / (allLatencyInSec || 1)).toFixed(3);
             var throughputMsgs = Math.floor(resultsMessages / (allLatencyInSec || 1));
@@ -262,7 +275,7 @@
                 messages: resultsMessages,
                 latency: latency,
                 throughputMbs: throughputMbs,
-                throughputMsgs: throughputMsg
+                throughputMsgs: throughputMsgs
             });
         }
 

@@ -154,7 +154,7 @@
     <form class="no-drag">
       <div>
         <input id="winQty" type="number" min="2" max="100" class="form-control" value="2">
-        <button type="button" class="btn btn-info btn-sm" onclick="updateWinQty()">Update</button>
+        <button id="winQtyBtn" type="button" class="btn btn-info btn-sm" onclick="updateWinQty()">Update</button>
       </div>
       <div>
         <input id="message-size-number" type="number" min="1" max="1000000" class="form-control" value="1">
@@ -193,9 +193,10 @@
             loader = document.querySelector('#loader'),
             version = document.querySelector('.electron-version-indicator'),
             formElWinQty = document.getElementById('winQty'),
+            formElTestStartStop = document.getElementById('test-start-stop'),
             formElMessageSizeNumber = document.getElementById('message-size-number'),
             formElMessageSizeText = document.getElementById('message-size-text'),
-            disablableEls = document.querySelectorAll('input, select, button'),
+            disablableEls = document.querySelectorAll('input, select, #winQtyBtn'),
             elapsedTimeEl = document.querySelector('#value-elapsed-time'),
             messagesEl = document.querySelector('#value-messages'),
             latencyEl = document.querySelector('#value-latency'),
@@ -218,7 +219,7 @@
     // Make sure needed number of windows are running
     //=====================================================================
     window.updateWinQty = function() {
-      var winQty = typeof qty === 'number' ? qty : formElWinQty.value;
+      var winQty = window.parseInt(formElWinQty.value);
       ipcRenderer.send('updateWinQty', winQty || 0);
     };
     window.updateWinQty();
@@ -227,7 +228,7 @@
     // Exit application
     //=====================================================================
     window.exitApp = function() {
-      window.updateWinQty(0);
+      ipcRenderer.send('exitApp');
     };
 
     //=====================================================================
@@ -282,7 +283,7 @@
         messageSizeNumber = messageSizeNumber * 1024 * 1024;
       }
       ipcRenderer.send('startTesting', messageSizeNumber);
-      updateUiResults(true); // reset results
+      updateUiResults(null, true); // reset results
 
     }
 

@@ -48,6 +48,7 @@ app.on('ready', function init () {
 
     // and load the index.html of the app.
     mainWin.loadURL(localIndex);
+    //mainWin.webContents.openDevTools();
 
     // Emitted when the window is closed.
     mainWin.on('closed', function () {
@@ -55,6 +56,7 @@ app.on('ready', function init () {
         // in an array if your app supports multi windows, this is the time
         // when you should delete the corresponding element.
         mainWin = null;
+        updateWinQty(0);
     });
 
 });
@@ -70,6 +72,7 @@ app.on('window-all-closed', function () {
 
 ipcMain.on('updateWinQty', function(event, numWins) {
     event.sender.send('loader', true);
+    console.log(numWins);
     updateWinQty(numWins, event);
 });
 
@@ -82,9 +85,14 @@ ipcMain.on('stopTesting', function() {
 });
 
 ipcMain.on('msg', function(event, msg) {
-    forwardMessage();
+    forwardMessage(event, msg);
 });
 
+ipcMain.on('exitApp', function exitApp() {
+    stopTesting();
+    updateWinQty(0);
+    mainWin.close();
+});
 
 //=====================================================================
 // Add new Window to the test
@@ -118,6 +126,7 @@ function createNewWin() {
         }
     );
     _window.loadURL(localTestWin);
+    //_window.webContents.openDevTools();
 
     testWins.push(_window);
     if (lastWin) {lastWin._next = _window;}
@@ -154,7 +163,7 @@ function updateWinQty(winQty, event){
         lastWin._next = testWins[0];
     }
 
-    event.sender.send('loader', false);
+    if (event) {event.sender.send('loader', false);}
 }
 
 //=====================================================================
@@ -179,18 +188,25 @@ function analytics() {
         elapsedTime: Math.round((elapsedTime[0]*1000) + (elapsedTime[1]/1000000)) //convert nanoseconds to milliseconds
     };
 
-    //Average across all the child windows for throughput and latency
-    testWins.forEach(function(win) {
-        results.messages += Number(win._results.messages);
-        results.latency += Number(win._results.latency);
-        results.throughputMbs += Number(win._results.throughputMbs);
-        results.throughputMsgs += Number(win._results.throughputMsgs);
+    var readyWins = testWins.filter(function(w){
+        return w._results;
     });
 
-    results.latency = (results.latency  / testWins.length).toFixed(3);
-    results.throughputMbs = ( results.throughputMbs / testWins.length).toFixed(3);
+    if (readyWins.length > 0) {
 
-    ipcMain.send('results', results);
+        //Average across all the child windows for throughput and latency that have results
+        readyWins.forEach(function (win) {
+            results.messages += Number(win._results.messages);
+            results.latency += Number(win._results.latency);
+            results.throughputMbs += Number(win._results.throughputMbs);
+            results.throughputMsgs += Number(win._results.throughputMsgs);
+        });
+
+        results.latency = (results.latency / readyWins.length).toFixed(3);
+        results.throughputMbs = ( results.throughputMbs / readyWins.length).toFixed(3);
+
+        mainWin.webContents.send('results', results);
+    }
 }
 
 //=====================================================================
@@ -209,6 +225,9 @@ function forwardMessage(event, msg) {
 //=====================================================================
 function startTesting(messageSizeNumber) {
     startClock();
+    testWins.forEach(function(w){
+        w.webContents.send('ready', messageSizeNumber);
+    });
     testWins[0].webContents.send('start', messageSizeNumber);
     ipcMain.on('testWindowResult', function (e, results){
         var win = findWindow(e.sender.id);
@@ -221,7 +240,9 @@ function startTesting(messageSizeNumber) {
 //=====================================================================
 function stopTesting() {
     clearInterval(elapsedTimeIntervalHandle);
-    testWins[0].webContents.send('stop');
+    testWins.forEach(function(w){
+        w.webContents.send('stop');
+    });
     ipcMain.removeAllListeners('testWindowResult');
 }
 
