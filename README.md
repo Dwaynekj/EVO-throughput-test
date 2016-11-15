@@ -1,4 +1,4 @@
-# openfin-throughput-testing
+# Electron and Openfin Comparison: Throughput Testing
 
 This repo is comprised of two standalone npm packages for running *Inter*-Process Windowing tests on Electron vs *Intra*-Procress Windowing tests in Openfin.
 

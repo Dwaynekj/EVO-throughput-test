@@ -37,7 +37,14 @@ var electron = require('electron'),
 // Some APIs can only be used after this event occurs.
 app.on('ready', function init () {
     // Create the browser window.
-    mainWin = new BrowserWindow({width: 300, height: 310});
+    mainWin = new BrowserWindow({
+        width: 300,
+        height: 310,
+        frame: false,
+        webPreferences: {
+            devTools: true
+        }
+    });
 
     // and load the index.html of the app.
     mainWin.loadURL(localIndex);
@@ -94,7 +101,7 @@ function createNewWin() {
         top = 0;
     }
 
-    var _window = BrowserWindow(
+    var _window = new BrowserWindow(
         {
             frame: false,
             show: true,
