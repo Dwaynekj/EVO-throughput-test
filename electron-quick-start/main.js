@@ -1,4 +1,5 @@
 var electron = require('electron'),
+    // Electron and Node modules
     app = electron.app, // Module to control application life.
     ipcMain = electron.ipcMain,
     BrowserWindow = electron.BrowserWindow, // Module to create native browser window

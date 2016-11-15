@@ -33,10 +33,15 @@
         }
 
         form input,
+        form .details,
         form select,
         form button {
-            margin-right: 3px;
-            width: 80px !important;
+            margin-right: 5px;
+            width: 90px !important;
+        }
+
+        form .details {
+            padding: 7px;
         }
 
         #main-content {
@@ -111,6 +116,15 @@
             pointer-events: none;
         }
 
+        /* recorder */
+        #recorder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            z-index: 100;
+        }
+
         #loader .glyphicon {
             font-size: 32px;
         }
@@ -140,13 +154,18 @@
         <div>Loading</div>
     </div>
 
+    <div id="recorder" class="hidden">
+        <div><span class="glyphicon glyphicon-refresh spin"></span></div>
+        <div>recording snapshots</div>
+    </div>
+
     <!-- Top bar -->
     <div class="top-bar">
         <!-- Need padded wrapper around the button to reset :hover -->
         <div class="close-wrapper no-drag">
             <div id="close-app-button" class="close" onclick="exitApp()">&times</div>
         </div>
-        <div class="text-center">window.postMessage performance</div>
+        <div class="text-center">Openfin Intra-Process Window Messaging</div>
     </div>
 
     <div id="main-content">
@@ -154,7 +173,8 @@
         <form class="no-drag">
             <div>
                 <input id="winQty" type="number" min="2" max="100" class="form-control" value="2">
-                <button type="button" class="btn btn-info btn-sm" onclick="updateWinQty()">Update</button>
+                <span class="details">Windows</span>
+                <button id="winQtyBtn" type="button" class="btn btn-info btn-sm" onclick="updateWinQty()">Update</button>
             </div>
             <div>
                 <input id="message-size-number" type="number" min="1" max="1000000" class="form-control" value="1">
@@ -164,6 +184,20 @@
                     <option value="MB">MB</option>
                 </select>
                 <button id="test-start-stop" type="button" class="btn btn-success btn-sm">Start</button>
+            </div>
+            <div>
+                <input id="snapshot-number" type="number" min="1" max="25" class="form-control" value="2">
+                <span class="details">Recordings</span>
+                <button id="snap" type="button" class="btn btn-success btn-sm">Snapshot</button>
+            </div>
+            <div>
+                <input id="snapshot-interval" type="number" min="1" max="1000" class="form-control" value="500">
+                <span class="details">Interval(ms)</span>
+                <button id="copy" type="button" class="btn btn-success btn-sm hidden">Copy</button>
+            </div>
+            <div>
+
+
             </div>
         </form>
 
@@ -188,37 +222,47 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         fin.desktop.main(function() {
-            var childWins = []; //Circularly Linked List of OpenFin Child Windows
-            var childUrl = "http://localhost:8080/child.html";
-            var screenWidth = 800; // initial, later will be updated
-            var screenHeight = 600; // initial, later will be updated
-            var width = 220;
-            var height = 144;
-            var appsGap = 1;
-            var maxRow = 1; // initial, later will be updated
-            var winFullWidth = width + appsGap;
-            var winFullHeight = height + appsGap;
-            var testIsRunning = false;
-            var elapsedTimeIntervalHandle, timeTestStart;
-            var winsToCreate;
+            // Window information
+            var childWins = [], //Circularly Linked List of OpenFin Child Windows
+                    childUrl = "http://localhost:8080/child.html",
+                    screenWidth = 800, // initial, later will be updated
+                    screenHeight = 600,// initial, later will be updated
+                    width = 220,
+                    height = 144,
+                    appsGap = 1,
+                    maxRow = 1, // initial, later will be updated
+                    winFullWidth = width + appsGap,
+                    winFullHeight = height + appsGap,
 
-            // HTML elements
-            var loader = document.querySelector('#loader');
-            var runtimeVersionEl = document.querySelector('.runtime-version-indicator');
-            var formElWinQty = document.getElementById('winQty');
-            var formElMessageSizeNumber = document.getElementById('message-size-number');
-            var formElMessageSizeText = document.getElementById('message-size-text');
-            var formElTestStartStop = document.getElementById('test-start-stop');
-            var disablableEls = document.querySelectorAll('input, select, button');
-            // HTML Results elements
-            var elapsedTimeEl = document.querySelector('#value-elapsed-time');
-            var messagesEl = document.querySelector('#value-messages');
-            var latencyEl = document.querySelector('#value-latency');
-            var throughputMbsEl = document.querySelector('#value-throughput-mbs');
-            var throughputMsgsEl = document.querySelector('#value-throughput-msgs');
+                    //Clock and Snap State
+                    testIsRunning = false,
+                    elapsedTimeIntervalHandle,
+                    timeTestStart,
+                    snapShotIsRunning = false,
+                    lastResults = null,
+                    snapShots = [],
+                    snapShotTimeout = null,
 
-            // Results
-            var elapsedTime = 0;
+                    //DOM
+                    loader = document.querySelector('#loader'),
+                    recorder = document.querySelector('#recorder'),
+                    version = document.querySelector('.electron-version-indicator'),
+                    formElWinQty = document.getElementById('winQty'),
+                    formElTestStartStop = document.getElementById('test-start-stop'),
+                    formElMessageSizeNumber = document.getElementById('message-size-number'),
+                    formElMessageSizeText = document.getElementById('message-size-text'),
+                    formElSnapShotNum = document.getElementById('snapshot-number'),
+                    formElSnapShotInterval = document.getElementById('snapshot-interval'),
+                    disablableEls = document.querySelectorAll('#message-size-number, #message-size-text, #winQty, #winQtyBtn'),
+                    snapShotBtn = document.querySelector('#snap'),
+                    snapShotEls = document.querySelectorAll('#snapshot-number, #snapshot-interval'),
+                    copyBtn = document.querySelector('#copy'),
+                    elapsedTimeEl = document.querySelector('#value-elapsed-time'),
+                    messagesEl = document.querySelector('#value-messages'),
+                    latencyEl = document.querySelector('#value-latency'),
+                    throughputMbsEl = document.querySelector('#value-throughput-mbs'),
+                    throughputMsgsEl = document.querySelector('#value-throughput-msgs');
+
 
             //=====================================================================
             // Get current runtime version
@@ -238,17 +282,24 @@
             });
 
             //=====================================================================
+            // Exit application
+            //=====================================================================
+            window.exitApp = function() {
+                showLoader(true);
+                fin.desktop.Application.getCurrent().close();
+            };
+
+            //=====================================================================
             // Setup Child Window Listeners
             //=====================================================================
             window.addEventListener("message", function (e) {
 
-                if (e.data.type === "results") {
+                if (e.data.type === "results" && testIsRunning) {
                     childWins.forEach(function (c) {
                         if (c.name === e.data.name) {
                             c._results = e.data.results;
                         }
                     });
-                    updateUiResults();
                 } else if (e.data.type === "status") {
 
                     childWins.forEach(function (c) {
@@ -290,14 +341,6 @@
                 }
             };
             window.updateWinQty();
-
-            //=====================================================================
-            // Exit application
-            //=====================================================================
-            window.exitApp = function() {
-                showLoader(true);
-                fin.desktop.Application.getCurrent().close();
-            };
 
             //=====================================================================
             // Add new Window to the test
@@ -356,11 +399,20 @@
             function showLoader(show) {
                 if (show === undefined || show) {
                     loader.classList.remove('hidden');
-                    disableForm(true);
+                    disableEls(true);
                 } else {
                     loader.classList.add('hidden');
-                    disableForm(false);
+                    disableEls(false,  disablableEls);
+                    disableEls(false,  snapShotEls);
+                    formElTestStartStop.disabled = false;
                 }
+            }
+
+            function disableEls(flag, els){
+                els = els || document.querySelectorAll('input, select, button');
+                [].forEach.call(els, function(e) {
+                    e.disabled = flag;
+                });
             }
 
             //=====================================================================
@@ -372,14 +424,9 @@
                 });
                 console.log("AllWindowsReady?");
                 console.log(allConnected);
-                showLoader(winsToCreate || !allConnected);
+                showLoader(!allConnected);
             }
 
-            function disableForm(flag){
-                [].forEach.call(disablableEls, function(e) {
-                    e.disabled = flag;
-                });
-            }
 
             //=====================================================================
             // Start / Stop button
@@ -388,23 +435,96 @@
                 testIsRunning = !testIsRunning;
 
                 // disable elements
-                disableForm(testIsRunning);
+                disableEls(testIsRunning, disablableEls);
+                snapShotBtn.disabled = !testIsRunning; //disable button when tests are not running
 
                 if (testIsRunning) {
-                    formElTestStartStop.innerText = 'Stop';
-                    formElTestStartStop.classList.add('btn-danger');
                     startTesting();
                 } else {
-                    formElTestStartStop.innerText = 'Start';
-                    formElTestStartStop.classList.remove('btn-danger');
                     stopTesting();
                 }
             };
 
             //=====================================================================
+            // Snapshot button
+            //=====================================================================
+            snapShotBtn.onclick = function() {
+                snapShotIsRunning = !snapShotIsRunning;
+                if (snapShotIsRunning) {
+                    startSnapShot();
+                } else {
+                    stopSnapShot();
+                }
+            };
+
+
+            //=====================================================================
+            // Start Snapshots
+            //=====================================================================
+            function startSnapShot() {
+                var num = Number(formElSnapShotNum.value),
+                        interval = Number(formElSnapShotInterval.value);
+
+                disableEls(true, snapShotEls);
+                copyBtn.disabled = true;
+                snapShotBtn.innerText = 'Stop Snap';
+                snapShotBtn.classList.add('btn-danger');
+                copyBtn.classList.add('hidden');
+                recorder.classList.remove('hidden');
+
+                function takeSnap() {
+                    if (num > 0) {
+                        snapShotTimeout = setTimeout(function () {
+                            num--;
+                            if (lastResults) {
+                                snapShots.push(Object.assign({}, lastResults));
+                            }
+                            takeSnap();
+                        }, interval);
+                    } else {
+                        console.log('Snap shot complete');
+                        stopSnapShot();
+                    }
+                }
+
+                takeSnap();
+
+            }
+
+            //=====================================================================
+            // Stop Snapshots
+            //=====================================================================
+            function stopSnapShot() {
+                clearTimeout(snapShotTimeout);
+                disableEls(false, snapShotEls);
+                copyBtn.disabled = false;
+
+                snapShotBtn.innerText = 'Start Snap';
+                snapShotBtn.classList.remove('btn-danger');
+                copyBtn.classList.remove('hidden');
+                recorder.classList.add('hidden');
+            }
+
+
+            //=====================================================================
+            // Copy button
+            //=====================================================================
+            copyBtn.onclick = function() {
+                fin.desktop.System.setClipboard(JSON.stringify(snapShots, null, 4), function () {
+                    console.log("successful clipboard write");
+                },function (err) {
+                    console.log("failure in writing to the clipboard: " + err);
+                });
+            };
+
+
+            //=====================================================================
             // Start testing
             //=====================================================================
             function startTesting() {
+                formElTestStartStop.innerText = 'Stop';
+                formElTestStartStop.classList.add('btn-danger');
+
                 var messageSizeNumber = Number(formElMessageSizeNumber.value);
                 var messageSizeText = formElMessageSizeText.selectedOptions[0].value;
 
@@ -414,63 +534,96 @@
                     messageSizeNumber = messageSizeNumber * 1024 * 1024;
                 }
 
-                timeTestStart = window.performance.now();
-                startClock();
-                updateUiResults(true); // reset results
 
-                // Tell each app to start testing
-                if (childWins[0]){
-                    childWins[0].getNativeWindow().postMessage({type: "test-start", size: messageSizeNumber}, childUrl);
-                }
+                startClock();
+
+                // Tell each app to get ready for testing
+                childWins.forEach(function(w){
+                    w.getNativeWindow().postMessage({type: "ready", size: messageSizeNumber}, childUrl);
+                });
+                childWins[0] && childWins[0].postMessage({type: "start", size: messageSizeNumber}, childUrl);
+                updateUiResults(null, true); // reset results
             }
 
             //=====================================================================
             // Stop testing
             //=====================================================================
             function stopTesting() {
+                stopSnapShot();
+                formElTestStartStop.innerText = 'Start';
+                formElTestStartStop.classList.remove('btn-danger');
+
+
                 clearInterval(elapsedTimeIntervalHandle);
 
                 // Tell each app to stop testing
-                if (childWins[0]){
-                    childWins[0].getNativeWindow().postMessage({type: "test-stop"}, childUrl);
-                }
+               childWins.forEach(function(w){
+                   w.getNativeWindow().postMessage({type: "stop"}, childUrl);
+               });
             }
 
             //=====================================================================
             // Update UI with results
             //=====================================================================
-            function updateUiResults(reset) {
-                var sumMessages = 0;
-                var sumLatency = 0;
-                var sumThroughputMbs = 0;
-                var sumThroughputMsgs = 0;
-
-                //Average across all the child windows for throughput and latency
-                if (!reset) {
-                    childWins.forEach(function(win) {
-                        sumMessages += Number(win._results.messages);
-                        sumLatency += Number(win._results.latency);
-                        sumThroughputMbs += Number(win._results.throughputMbs);
-                        sumThroughputMsgs += Number(win._results.throughputMsgs);
-                    });
+            function updateUiResults(results, reset) {
+                if (reset) {
+                    results = {
+                        messages: 0,
+                        latency: 0,
+                        throughputMbs: 0,
+                        throughputMsgs: 0,
+                        elapsedTime: 0
+                    }
                 }
 
-                messagesEl.innerText = sumMessages;
-                latencyEl.innerText = (sumLatency / childWins.length).toFixed(3);
-                throughputMbsEl.innerText = (sumThroughputMbs / childWins.length).toFixed(3);
-                throughputMsgsEl.innerText = sumThroughputMsgs;
+                elapsedTimeEl.innerText = msToTime(results.elapsedTime);
+                messagesEl.innerText = results.messages;
+                latencyEl.innerText = results.latency;
+                throughputMbsEl.innerText = results.throughputMbs;
+                throughputMsgsEl.innerText = results.throughputMsgs;
+            }
+
+            //=====================================================================
+            //
+            //=====================================================================
+            function analytics() {
+
+                var results = {
+                    messages: 0,
+                    latency: 0,
+                    throughputMbs: 0,
+                    throughputMsgs: 0,
+                    elapsedTime: Math.round(window.performance.now() - timeTestStart)
+                };
+
+                var readyWins = childWins.filter(function(w){
+                    return w._results;
+                });
+
+                if (readyWins.length > 0) {
+
+                    //Average across all the child windows for throughput and latency that have results
+                    readyWins.forEach(function(win) {
+                        results.messages += Number(win._results.messages);
+                        results.latency += Number(win._results.latency);
+                        results.throughputMbs += Number(win._results.throughputMbs);
+                        results.throughputMsgs += Number(win._results.throughputMsgs);
+                    });
+
+                    results.latency = (results.latency / readyWins.length).toFixed(3);
+                    results.throughputMbs = ( results.throughputMbs / readyWins.length).toFixed(3);
+
+                    lastResults = results;
+                    updateUiResults(results);
+                }
             }
 
             //=====================================================================
             // Start elapsed time clock
             //=====================================================================
             function startClock() {
-                function updateTime() {
-                    elapsedTime = Math.round(window.performance.now() - timeTestStart);
-                    elapsedTimeEl.innerText = msToTime(elapsedTime);
-                }
-                elapsedTimeIntervalHandle = setInterval(updateTime, 1000);
-                updateTime();
+                timeTestStart = window.performance.now();
+                elapsedTimeIntervalHandle = setInterval(analytics, 1000);
             }
 
             //=====================================================================

@@ -115,48 +115,49 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-
-        var loader = document.querySelector('#loader');
-        var arrowIcon = document.querySelector('#arrow-icon');
-        var parentUrl = "http://localhost:8080/index.html";
-        var childUrl = "http://localhost:8080/child.html";
-
-        // Results elements
-        var elapsedTimeEl = document.querySelector('#value-elapsed-time');
-        var messagesEl = document.querySelector('#value-messages');
-        var latencyEl = document.querySelector('#value-latency');
-        var throughputMbsEl = document.querySelector('#value-throughput-mbs');
-        var throughputMsgsEl = document.querySelector('#value-throughput-msgs');
-
-        // Variables
-        var message; // message being passed though IAB
-        var messageSizeInMb;
-        var testIsRunning = false;
-        var timeTestStart;
-        var timeMessageSent;
-        var timeMessageReceived;
-        var elapsedTimeIntervalHandle;
-        var messageSizeNumber;
-
-        // Results
-        var allLatencyInSec = 0;
-        var elapsedTime = 0;
-        var resultsMessages = 0;
-        var allSizeInMbTransferred = 0;
-
         fin.desktop.main(function() {
-
             var finWindow = fin.desktop.Window.getCurrent(),
-                    parentWindow = finWindow.getParentWindow();
+                    parentWindow = finWindow.getParentWindow(),
+                    loader = document.querySelector('#loader'),
+                    arrowIcon = document.querySelector('#arrow-icon'),
+                    parentUrl = "http://localhost:8080/index.html",
+                    childUrl = "http://localhost:8080/child.html",
+
+                    // Results elements
+                    elapsedTimeEl = document.querySelector('#value-elapsed-time'),
+                    messagesEl = document.querySelector('#value-messages'),
+                    latencyEl = document.querySelector('#value-latency'),
+                    throughputMbsEl = document.querySelector('#value-throughput-mbs'),
+                    throughputMsgsEl = document.querySelector('#value-throughput-msgs'),
+
+                    // Variables
+                    testIsRunning = false,
+                    timeTestStart,
+                    timeMessageSent,
+                    timeMessageReceived,
+                    elapsedTimeIntervalHandle,
+                    firstReceived = true,
+
+                    // Results
+                    allLatencyInSec = 0,
+                    lapsedTime = 0,
+                    resultsMessages = 0, //messages recieved
+                    payLoadSize = 0, //bytes
+                    totalPayloadTransferred = 0, //bytes sent and recieved
+                    allSizeInMbTransferred = 0; //Mb
+
+            arrowIcon.classList.add('hidden');
 
             //=====================================================================
             // Subscriptions
             //=====================================================================
             window.addEventListener("message", function (e) {
-                if (e.data.type === "test-start") {
+                if (e.data.type === "start") {
                     startTesting(e);
-                } else if (e.data.type === "test-stop") {
+                } else if (e.data.type === "stop") {
                     stopTesting(e);
+                } else if (e.data.type === "ready") {
+                    readyForTesting(e);
                 } else if (e.data.type === "msg") {
                     onMessageReceived(e);
                 }
@@ -164,134 +165,151 @@
 
             parentWindow.getNativeWindow().postMessage({type: "status", name: finWindow.name, status: "ready"}, parentUrl);
             loader.classList.add('hidden');
-        });
 
-        //=====================================================================
-        // Start testing
-        //=====================================================================
-        function startTesting(e) {
-            messageSizeNumber = e.data.size;
-            testIsRunning = true;
-            timeTestStart = window.performance.now();
-            startClock();
-            resetResults();
-            messageSizeInMb = messageSizeNumber / 1024 / 1024;
-            sendMessage(generateMessageOfSize(messageSizeNumber));
-        }
 
-        //=====================================================================
-        // Stop testing
-        //=====================================================================
-        function stopTesting() {
-            testIsRunning = false;
-            clearInterval(elapsedTimeIntervalHandle)
-        }
-
-        //=====================================================================
-        // Generate a message of the specified size
-        //=====================================================================
-        function generateMessageOfSize(length) {
-            return Array.prototype.join.call({length: (length || -1) + 1}, 'x');
-        }
-
-        //=====================================================================
-        // Send the message
-        //=====================================================================
-        function sendMessage(msg) {
-            if (!testIsRunning || !window._next) {
-                return;
+            //=====================================================================
+            // Start testing
+            //=====================================================================
+            function startTesting(e) {
+                firstReceived = false;
+                startClock();
+                sendMessage(generateMessageOfSize(messageSizeNumber));
             }
 
-            arrowIcon.classList.remove('hidden');
-            window._next.getNativeWindow().postMessage({type: "msg", msg: msg}, childUrl);
+            //=====================================================================
+            // Ready Window for Testing
+            //=====================================================================
+            function readyForTesting(messageSizeNumber) {
+                payLoadSize = messageSizeNumber;
+                testIsRunning = true;
+                resetResults();
+            }
 
-            setTimeout(function() {
+            //=====================================================================
+            // Stop testing
+            //=====================================================================
+            function stopTesting() {
+                testIsRunning = false;
+                clearInterval(elapsedTimeIntervalHandle)
+            }
+
+            //=====================================================================
+            // Generate a message of the specified size
+            //=====================================================================
+            function generateMessageOfSize(length) {
+                return Array.prototype.join.call({length: (length || -1) + 1}, 'x');
+            }
+
+            //=====================================================================
+            // Send the message
+            //=====================================================================
+            function sendMessage(msg) {
+                if (!testIsRunning || !window._next) {
+                    return;
+                }
+
+                arrowIcon.classList.remove('hidden');
+                window._next.getNativeWindow().postMessage({type: "msg", msg: msg}, childUrl);
                 timeMessageSent = window.performance.now();
-                arrowIcon.classList.add('hidden');
                 resultsMessages++;
-                allSizeInMbTransferred += messageSizeInMb;
-            }, 50); // give some time for UI
-        }
+                totalPayloadTransferred += msg.length;
 
-        //=====================================================================
-        // On receiving message
-        //=====================================================================
-        function onMessageReceived(e) {
-            timeMessageReceived = window.performance.now();
-            resultsMessages++;
-            allSizeInMbTransferred += messageSizeInMb;
-            allLatencyInSec += ((timeMessageReceived - timeMessageSent - 50) / 1000); // -50 is for timeout in 2nd app
-
-            updateResults();
-            sendMessage(e.data);
-        }
-
-        //=====================================================================
-        // Reset results
-        //=====================================================================
-        function resetResults() {
-            allLatencyInSec = 0;
-            elapsedTime = 0;
-            resultsMessages = 0;
-            allSizeInMbTransferred = 0;
-            updateResults();
-        }
-
-        //=====================================================================
-        // Update UI with results
-        //=====================================================================
-        function updateResults() {
-            // || 1 in these cases will prevent NaN
-            var latency = (allLatencyInSec * 1000 / (resultsMessages || 1)).toFixed(3);
-            var throughputMbs = (allSizeInMbTransferred / (allLatencyInSec || 1)).toFixed(3);
-            var throughputMsgs = Math.floor(resultsMessages / (allLatencyInSec || 1));
-
-            messagesEl.innerText = resultsMessages;
-            latencyEl.innerText = latency;
-            throughputMbsEl.innerText = throughputMbs;
-            throughputMsgsEl.innerText = throughputMsgs;
-
-            // Send test results to main panel
-            parentWindow.getNativeWindow().postMessage({
-                    "type": "results",
-                    "name" : finWindow.name,
-                    "results" :{
-                        messages: resultsMessages,
-                        latency: latency,
-                        throughputMbs: throughputMbs,
-                        throughputMsgs: throughputMsgs
-                     }
-                },
-                parentUrl
-            );
-        }
-
-        //=====================================================================
-        // Start elapsed time clock
-        //=====================================================================
-        function startClock() {
-            function updateTime() {
-                elapsedTime = window.performance.now() - timeTestStart;
-                elapsedTimeEl.innerText = msToTime(elapsedTime);
+                setTimeout(function() {
+                    arrowIcon.classList.add('hidden');
+                }, 100); // give some time for UI
             }
-            elapsedTimeIntervalHandle = setInterval(updateTime, 1000);
-            updateTime();
-        }
 
-        //=====================================================================
-        // Convert milliseconds to time string
-        //=====================================================================
-        function msToTime(duration) {
-            var seconds = parseInt((duration / 1000) % 60);
-            var minutes = parseInt((duration / (1000 * 60)) % 60);
-            var hours = parseInt((duration / (1000 * 60 * 60)) % 24);
+            //=====================================================================
+            // On receiving message
+            //=====================================================================
+            function onMessageReceived(e) {
+                var time = window.performance.now();
 
-            hours = (hours < 10) ? '0' + hours : hours;
-            minutes = (minutes < 10) ? '0' + minutes : minutes;
-            seconds = (seconds < 10) ? '0' + seconds : seconds;
+                // For every window besides the first window in the chain
+                // Receiving an initial message starts the clock
+                if (firstReceived){
+                    startClock(time);
+                    firstReceived = false;
 
-            return hours + ':' + minutes + ':' + seconds;
-        }
+                } else {
+                    timeMessageReceived = time;
+                    resultsMessages++;
+                    totalPayloadTransferred += msg.length;
+                    allLatencyInSec += ((timeMessageReceived - timeMessageSent) / 1000);
+                    updateResults();
+                }
+
+                sendMessage(e);
+            }
+
+            //=====================================================================
+            // Reset results
+            //=====================================================================
+            function resetResults() {
+                allLatencyInSec = 0;
+                elapsedTime = 0;
+                resultsMessages = 0;
+                totalPayloadTransferred = 0;
+                updateResults();
+            }
+
+            //=====================================================================
+            // Update UI with results
+            //=====================================================================
+            function updateResults() {
+                // || 1 in these cases will prevent NaN
+                var latency = (allLatencyInSec * 1000 / (resultsMessages || 1)).toFixed(3);
+                var throughputMbs = (allSizeInMbTransferred / (allLatencyInSec || 1)).toFixed(3);
+                var throughputMsgs = Math.floor(resultsMessages / (allLatencyInSec || 1));
+
+                messagesEl.innerText = resultsMessages;
+                latencyEl.innerText = latency;
+                throughputMbsEl.innerText = throughputMbs;
+                throughputMsgsEl.innerText = throughputMsgs;
+
+                // Send test results to main panel
+                parentWindow.getNativeWindow().postMessage({
+                        "type": "results",
+                        "name" : finWindow.name,
+                        "results" :{
+                            messages: resultsMessages,
+                            latency: latency,
+                            throughputMbs: throughputMbs,
+                            throughputMsgs: throughputMsgs
+                         }
+                    },
+                    parentUrl
+                );
+            }
+
+            //=====================================================================
+            // Start elapsed time clock
+            //=====================================================================
+            function startClock(initialTime) {
+                timeTestStart = initialTime || window.performance.now();
+                function updateTime() {
+                    elapsedTime = window.performance.now() - timeTestStart;
+                    elapsedTimeEl.innerText = msToTime(elapsedTime);
+                }
+                elapsedTimeIntervalHandle = setInterval(updateTime, 1000);
+                updateTime();
+            }
+
+            //=====================================================================
+            // Convert milliseconds to time string
+            //=====================================================================
+            function msToTime(duration) {
+                var seconds = parseInt((duration / 1000) % 60);
+                var minutes = parseInt((duration / (1000 * 60)) % 60);
+                var hours = parseInt((duration / (1000 * 60 * 60)) % 24);
+
+                hours = (hours < 10) ? '0' + hours : hours;
+                minutes = (minutes < 10) ? '0' + minutes : minutes;
+                seconds = (seconds < 10) ? '0' + seconds : seconds;
+
+                return hours + ':' + minutes + ':' + seconds;
+            }
+        });
 
     });
 </script>
