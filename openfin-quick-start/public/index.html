@@ -295,7 +295,7 @@
             // Setup Child Window Listeners
             //=====================================================================
             window.addEventListener("message", function (e) {
-                console.log("Received message")
+                //console.log("Received message")
 
                 if (e.data.type === "results" && testIsRunning) {
                     childWins.forEach(function (c) {
@@ -377,7 +377,7 @@
                             }
                         },
                         function () {
-                            console.log("Successfully Created Window");
+                            //console.log("Successfully Created Window");
                             var lastWin = childWins[childWins.length - 1];
                             childWins.push(_window);
                             var nativeWin = _window.getNativeWindow();
@@ -395,7 +395,7 @@
 
                         },
                         function () {
-                            console.log("Window creation failed");
+                            //console.log("Window creation failed");
                         }
                 );
 
@@ -432,8 +432,8 @@
                     return e._status === 'ready';
                 });
                 var ready = allConnected && winsToCreate === childWins.length;
-                console.log("AllWindowsReady?");
-                console.log(ready);
+                //console.log("AllWindowsReady?");
+                //console.log(ready);
                 showLoader(!ready);
             }
 
@@ -492,7 +492,7 @@
                             takeSnap();
                         }, interval);
                     } else {
-                        console.log('Snap shot complete');
+                        //console.log('Snap shot complete');
                         stopSnapShot();
                     }
                 }
@@ -521,9 +521,9 @@
             //=====================================================================
             copyBtn.onclick = function() {
                 fin.desktop.System.setClipboard(JSON.stringify(snapShots, null, 4), function () {
-                    console.log("successful clipboard write");
+                    //console.log("successful clipboard write");
                 },function (err) {
-                    console.log("failure in writing to the clipboard: " + err);
+                    //console.log("failure in writing to the clipboard: " + err);
                 });
             };
 
@@ -532,7 +532,7 @@
             // Start testing
             //=====================================================================
             function startTesting() {
-                console.log("start test");
+                //console.log("start test");
                 formElTestStartStop.innerText = 'Stop';
                 formElTestStartStop.classList.add('btn-danger');
 
@@ -560,7 +560,7 @@
             // Stop testing
             //=====================================================================
             function stopTesting() {
-                console.log("stop test");
+                //console.log("stop test");
                 stopSnapShot();
                 formElTestStartStop.innerText = 'Start';
                 formElTestStartStop.classList.remove('btn-danger');

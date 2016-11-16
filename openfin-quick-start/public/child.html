@@ -170,7 +170,7 @@
             // Start testing
             //=====================================================================
             function startTesting(e) {
-                console.log("start test");
+             //console.log("start test");
                 firstReceived = false;
                 startClock();
                 sendMessage(generateMessageOfSize(e.data.size));
@@ -180,7 +180,7 @@
             // Ready Window for Testing
             //=====================================================================
             function readyForTesting(messageSizeNumber) {
-                console.log("ready test");
+             //console.log("ready test");
                 payLoadSize = messageSizeNumber;
                 testIsRunning = true;
                 resetResults();
@@ -190,7 +190,7 @@
             // Stop testing
             //=====================================================================
             function stopTesting() {
-                console.log("stop test");
+             //console.log("stop test");
                 testIsRunning = false;
                 clearInterval(elapsedTimeIntervalHandle)
             }
@@ -219,14 +219,14 @@
                 setTimeout(function() {
                     arrowIcon.classList.add('hidden');
                 }, 100); // give some time for UI
-                console.log("msg send");
+             //console.log("msg send");
             }
 
             //=====================================================================
             // On receiving message
             //=====================================================================
             function onMessageReceived(e) {
-                console.log("message recieved");
+             //console.log("message recieved");
                 var time = window.performance.now();
 
                 // For every window besides the first window in the chain
