@@ -117,7 +117,6 @@
     document.addEventListener('DOMContentLoaded', function() {
         fin.desktop.main(function() {
             var finWindow = fin.desktop.Window.getCurrent(),
-                    parentWindow = finWindow.getParentWindow(),
                     loader = document.querySelector('#loader'),
                     arrowIcon = document.querySelector('#arrow-icon'),
                     parentUrl = "http://localhost:8080/index.html",
@@ -140,7 +139,7 @@
 
                     // Results
                     allLatencyInSec = 0,
-                    lapsedTime = 0,
+                    elapsedTime = 0,
                     resultsMessages = 0, //messages recieved
                     payLoadSize = 0, //bytes
                     totalPayloadTransferred = 0, //bytes sent and recieved
@@ -163,7 +162,7 @@
                 }
             });
 
-            parentWindow.getNativeWindow().postMessage({type: "status", name: finWindow.name, status: "ready"}, parentUrl);
+            window.opener.postMessage({type: "status", name: finWindow.name, status: "ready"}, parentUrl);
             loader.classList.add('hidden');
 
 
@@ -171,15 +170,17 @@
             // Start testing
             //=====================================================================
             function startTesting(e) {
+                console.log("start test");
                 firstReceived = false;
                 startClock();
-                sendMessage(generateMessageOfSize(messageSizeNumber));
+                sendMessage(generateMessageOfSize(e.data.size));
             }
 
             //=====================================================================
             // Ready Window for Testing
             //=====================================================================
             function readyForTesting(messageSizeNumber) {
+                console.log("ready test");
                 payLoadSize = messageSizeNumber;
                 testIsRunning = true;
                 resetResults();
@@ -189,6 +190,7 @@
             // Stop testing
             //=====================================================================
             function stopTesting() {
+                console.log("stop test");
                 testIsRunning = false;
                 clearInterval(elapsedTimeIntervalHandle)
             }
@@ -209,7 +211,7 @@
                 }
 
                 arrowIcon.classList.remove('hidden');
-                window._next.getNativeWindow().postMessage({type: "msg", msg: msg}, childUrl);
+                window._next.postMessage({type: "msg", msg: msg}, childUrl);
                 timeMessageSent = window.performance.now();
                 resultsMessages++;
                 totalPayloadTransferred += msg.length;
@@ -217,12 +219,14 @@
                 setTimeout(function() {
                     arrowIcon.classList.add('hidden');
                 }, 100); // give some time for UI
+                console.log("msg send");
             }
 
             //=====================================================================
             // On receiving message
             //=====================================================================
             function onMessageReceived(e) {
+                console.log("message recieved");
                 var time = window.performance.now();
 
                 // For every window besides the first window in the chain
@@ -234,12 +238,12 @@
                 } else {
                     timeMessageReceived = time;
                     resultsMessages++;
-                    totalPayloadTransferred += msg.length;
+                    totalPayloadTransferred += e.data.msg.length;
                     allLatencyInSec += ((timeMessageReceived - timeMessageSent) / 1000);
                     updateResults();
                 }
 
-                sendMessage(e);
+                sendMessage(e.data.msg);
             }
 
             //=====================================================================
@@ -268,7 +272,7 @@
                 throughputMsgsEl.innerText = throughputMsgs;
 
                 // Send test results to main panel
-                parentWindow.getNativeWindow().postMessage({
+                window.opener.postMessage({
                         "type": "results",
                         "name" : finWindow.name,
                         "results" :{
