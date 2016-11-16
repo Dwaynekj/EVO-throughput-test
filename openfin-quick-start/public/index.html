@@ -234,7 +234,7 @@
                     maxRow = 1, // initial, later will be updated
                     winFullWidth = width + appsGap,
                     winFullHeight = height + appsGap,
-                    winsToCreate,
+                    winQty,
 
                     //Clock and Snap State
                     testIsRunning = false,
@@ -318,7 +318,8 @@
             // Make sure needed number of child windows are running
             //=====================================================================
             window.updateWinQty = function(qty) {
-                var winQty = typeof qty === 'number' ? qty : formElWinQty.value;
+                showLoader(true);
+                winQty = typeof qty === 'number' ? qty : parseInt(formElWinQty.value);
 
                 // close and remove child windows
                 if (winQty < childWins.length) {
@@ -331,7 +332,7 @@
                 }
                 // create new child windows
                 else if (winQty > childWins.length) {
-                    winsToCreate = winQty - childWins.length;
+                    var winsToCreate = winQty - childWins.length;
                     for (var i = 0; i < winsToCreate; i++) {
                         var name = "win" + childCount++;
                         createNewChildWin(name);
@@ -345,8 +346,6 @@
             // Add new Window to the test
             //=====================================================================
             function createNewChildWin(name) {
-                showLoader(true);
-
                 var left, top;
 
                 // Calculate win position
@@ -377,7 +376,7 @@
                             }
                         },
                         function () {
-                            //console.log("Successfully Created Window");
+                            console.log("Successfully Created Window");
                             var lastWin = childWins[childWins.length - 1];
                             childWins.push(_window);
                             var nativeWin = _window.getNativeWindow();
@@ -395,7 +394,7 @@
 
                         },
                         function () {
-                            //console.log("Window creation failed");
+                            console.log("Window creation failed");
                         }
                 );
 
@@ -431,9 +430,9 @@
                 var allConnected = childWins.every(function(e) {
                     return e._status === 'ready';
                 });
-                var ready = allConnected && winsToCreate === childWins.length;
-                //console.log("AllWindowsReady?");
-                //console.log(ready);
+                var ready = allConnected && winQty === childWins.length;
+                console.log("AllWindowsReady?");
+                console.log(ready);
                 showLoader(!ready);
             }
 
