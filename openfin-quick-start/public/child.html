@@ -262,6 +262,7 @@
             //=====================================================================
             function updateResults() {
                 // || 1 in these cases will prevent NaN
+                allSizeInMbTransferred = totalPayloadTransferred / 1024 / 1024;
                 var latency = (allLatencyInSec * 1000 / (resultsMessages || 1)).toFixed(3);
                 var throughputMbs = (allSizeInMbTransferred / (allLatencyInSec || 1)).toFixed(3);
                 var throughputMsgs = Math.floor(resultsMessages / (allLatencyInSec || 1));

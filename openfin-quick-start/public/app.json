@@ -1,7 +1,7 @@
 {
   "devtools_port": 9090,
   "runtime": {
-    "version": "6.49.12.120",
+    "version": "stable",
     "arguments": "",
     "forceLatest": true
   },
@@ -14,8 +14,8 @@
     "frame": false,
     "defaultWidth": 330,
     "minWidth": 330,
-    "defaultHeight": 400,
-    "minHeight": 400,
+    "defaultHeight": 450,
+    "minHeight": 450,
     "alwaysOnTop": true,
     "defaultCentered": true,
     "saveWindowState": false,
